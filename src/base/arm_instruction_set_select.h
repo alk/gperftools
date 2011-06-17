@@ -1,4 +1,4 @@
-// Copyright (c) 2009, Google Inc.
+// Copyright (c) 2011, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,66 +26,54 @@
 // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-// ---
-// Author: Andrew Fikes
 //
-// Utility class for coalescing sampled stack traces.  Not thread-safe.
+// Author: Alexander Levitskiy
+//
+// Generalizes the plethora of ARM flavors available to an easier to manage set
+// Defs reference is at https://wiki.edubuntu.org/ARM/Thumb2PortingHowto
 
-#ifndef TCMALLOC_STACK_TRACE_TABLE_H_
-#define TCMALLOC_STACK_TRACE_TABLE_H_
+#ifndef ARM_INSTRUCTION_SET_SELECT_H_
+#define ARM_INSTRUCTION_SET_SELECT_H_
 
-#include <config.h>
-#ifdef HAVE_STDINT_H
-#include <stdint.h>                     // for uintptr_t
+#if defined(__ARM_ARCH_7__) || \
+    defined(__ARM_ARCH_7R__) || \
+    defined(__ARM_ARCH_7A__)
+# define ARMV7 1
 #endif
-#include "common.h"
 
-namespace tcmalloc {
+#if defined(ARMV7) || \
+    defined(__ARM_ARCH_6__) || \
+    defined(__ARM_ARCH_6J__) || \
+    defined(__ARM_ARCH_6K__) || \
+    defined(__ARM_ARCH_6Z__) || \
+    defined(__ARM_ARCH_6T2__) || \
+    defined(__ARM_ARCH_6ZK__)
+# define ARMV6 1
+#endif
 
-class PERFTOOLS_DLL_DECL StackTraceTable {
- public:
-  // REQUIRES: L < pageheap_lock
-  StackTraceTable();
-  ~StackTraceTable();
+#if defined(ARMV6) || \
+    defined(__ARM_ARCH_5T__) || \
+    defined(__ARM_ARCH_5E__) || \
+    defined(__ARM_ARCH_5TE__) || \
+    defined(__ARM_ARCH_5TEJ__)
+# define ARMV5 1
+#endif
 
-  // Adds stack trace "t" to table.
-  //
-  // REQUIRES: L >= pageheap_lock
-  void AddTrace(const StackTrace& t);
+#if defined(ARMV5) || \
+    defined(__ARM_ARCH_4__) || \
+    defined(__ARM_ARCH_4T__)
+# define ARMV4 1
+#endif
 
-  // Returns stack traces formatted per MallocExtension guidelines.
-  // May return NULL on error.  Clears state before returning.
-  //
-  // REQUIRES: L < pageheap_lock
-  void** ReadStackTracesAndClear();
+#if defined(ARMV4) || \
+    defined(__ARM_ARCH_3__) || \
+    defined(__ARM_ARCH_3M__)
+# define ARMV3 1
+#endif
 
-  // Exposed for PageHeapAllocator
-  struct Bucket {
-    // Key
-    uintptr_t hash;
-    StackTrace trace;
+#if defined(ARMV3) || \
+    defined(__ARM_ARCH_2__)
+# define ARMV2 1
+#endif
 
-    // Payload
-    int count;
-    Bucket* next;
-
-    bool KeyEqual(uintptr_t h, const StackTrace& t) const;
-  };
-
-  // For testing
-  int depth_total() const { return depth_total_; }
-  int bucket_total() const { return bucket_total_; }
-
- private:
-  static const int kHashTableSize = 1 << 14; // => table_ is 128k
-
-  bool error_;
-  int depth_total_;
-  int bucket_total_;
-  Bucket** table_;
-};
-
-}  // namespace tcmalloc
-
-#endif  // TCMALLOC_STACK_TRACE_TABLE_H_
+#endif  // ARM_INSTRUCTION_SET_SELECT_H_

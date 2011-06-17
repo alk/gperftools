@@ -1,10 +1,10 @@
-/* Copyright (c) 2007, Google Inc.
+/* Copyright (c) 2010, Google Inc.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
- * 
+ *
  *     * Redistributions of source code must retain the above copyright
  * notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above
@@ -14,7 +14,7 @@
  *     * Neither the name of Google Inc. nor the names of its
  * contributors may be used to endorse or promote products derived from
  * this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -28,40 +28,23 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * ---
- * Author: Craig Silverstein
- *
- * MinGW is an interesting mix of unix and windows.  We use a normal
- * configure script, but still need the windows port.h to define some
- * stuff that MinGW doesn't support, like pthreads.
+ * Author: Chris Ruemmler
  */
 
-#ifndef GOOGLE_PERFTOOLS_WINDOWS_MINGW_H_
-#define GOOGLE_PERFTOOLS_WINDOWS_MINGW_H_
+#ifndef BASE_AUXILIARY_SYNCHRONIZATION_PROFILING_H_
+#define BASE_AUXILIARY_SYNCHRONIZATION_PROFILING_H_
 
-#ifdef __MINGW32__
+#include "base/basictypes.h"
 
-// Older version of the mingw msvcrt don't define _aligned_malloc
-#if __MSVCRT_VERSION__ < 0x0700
-# define PERFTOOLS_NO_ALIGNED_MALLOC 1
-#endif
+namespace base {
 
-// This must be defined before the windows.h is included.  We need at
-// least 0x0400 for mutex.h to have access to TryLock, and at least
-// 0x0501 for patch_functions.cc to have access to GetModuleHandleEx.
-// (This latter is an optimization we could take out if need be.)
-#ifndef _WIN32_WINNT
-# define _WIN32_WINNT 0x0501
-#endif
+// We can do contention-profiling of SpinLocks, but the code is in
+// mutex.cc, which is not always linked in with spinlock.  Hence we
+// provide a weak definition, which are used if mutex.cc isn't linked in.
 
-#include "windows/port.h"
-
-#define HAVE_SNPRINTF 1
-
-// Some mingw distributions have a pthreads wrapper, but it doesn't
-// work as well as native windows spinlocks (at least for us).  So
-// pretend the pthreads wrapper doesn't exist, even when it does.
-#undef HAVE_PTHREAD
-
-#endif  /* __MINGW32__ */
-
-#endif  /* GOOGLE_PERFTOOLS_WINDOWS_MINGW_H_ */
+// Submit the number of cycles the spinlock spent contending.
+ATTRIBUTE_WEAK extern void SubmitSpinLockProfileData(const void *, int64);
+extern void SubmitSpinLockProfileData(const void *contendedlock,
+                                      int64 wait_cycles) {}
+}
+#endif  // BASE_AUXILIARY_SYNCHRONIZATION_PROFILING_H_
