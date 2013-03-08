@@ -323,8 +323,9 @@ extern void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
 }
 
 bool TCMalloc_SystemRelease(void* start, size_t length) {
-  // TODO(csilvers): should I be calling VirtualFree here?
-  return false;
+  void* result = VirtualAlloc(start, length,
+                              MEM_RESET, PAGE_READWRITE);
+  return result != NULL;
 }
 
 bool RegisterSystemAllocator(SysAllocator *allocator, int priority) {
