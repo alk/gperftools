@@ -58,6 +58,43 @@
 #endif
 #include "internal_logging.h"  // for ASSERT
 
+class TCMalloc_AllocationBatcher {
+public:
+  typedef void* (*allocator_type)(size_t);
+
+  explicit TCMalloc_AllocationBatcher(allocator_type allocator) {
+    allocator_ = allocator;
+    free_area_ = NULL;
+    free_avail_ = 0;
+  }
+
+  void * operator()(size_t size) {
+    if (free_avail_ < size) {
+      size_t increment = (size > kAllocIncrement) ? size * 2 : kAllocIncrement;
+      free_area_ = reinterpret_cast<char*>(allocator_(increment));
+      if (free_area_ == NULL) {
+        tcmalloc::Log(tcmalloc::kCrash, __FILE__, __LINE__,
+                      "FATAL ERROR: Out of memory trying   to allocate internal "
+                      "tcmalloc data (bytes, object-size)",
+                      kAllocIncrement, size);
+      }
+      free_avail_ = kAllocIncrement;
+    }
+    void *result = static_cast<void *>(free_area_);
+    free_area_ += size;
+    free_avail_ -= size;
+    return result;
+  }
+
+private:
+  char* free_area_;
+  size_t free_avail_;
+  allocator_type allocator_;
+
+  // How much to allocate from system at a time
+  static const int kAllocIncrement = 128 << 10;
+};
+
 // Single-level array
 template <int BITS>
 class TCMalloc_PageMap1 {
@@ -130,14 +167,13 @@ class TCMalloc_PageMap2 {
     void* values[LEAF_LENGTH];
   };
 
-  Leaf* root_[ROOT_LENGTH];             // Pointers to 32 child nodes
-  void* (*allocator_)(size_t);          // Memory allocator
+  Leaf* root_[ROOT_LENGTH];              // Pointers to 32 child nodes
+  TCMalloc_AllocationBatcher allocator_; // Memory allocator
 
  public:
   typedef uintptr_t Number;
 
-  explicit TCMalloc_PageMap2(void* (*allocator)(size_t)) {
-    allocator_ = allocator;
+  explicit TCMalloc_PageMap2(void* (*allocator)(size_t)) : allocator_(allocator) {
     memset(root_, 0, sizeof(root_));
   }
 
@@ -167,7 +203,7 @@ class TCMalloc_PageMap2 {
 
       // Make 2nd level node if necessary
       if (root_[i1] == NULL) {
-        Leaf* leaf = reinterpret_cast<Leaf*>((*allocator_)(sizeof(Leaf)));
+        Leaf* leaf = reinterpret_cast<Leaf*>((allocator_)(sizeof(Leaf)));
         if (leaf == NULL) return false;
         memset(leaf, 0, sizeof(*leaf));
         root_[i1] = leaf;
@@ -225,11 +261,11 @@ class TCMalloc_PageMap3 {
     void* values[LEAF_LENGTH];
   };
 
-  Node* root_;                          // Root of radix tree
-  void* (*allocator_)(size_t);          // Memory allocator
+  Node* root_;                           // Root of radix tree
+  TCMalloc_AllocationBatcher allocator_; // Memory allocator
 
   Node* NewNode() {
-    Node* result = reinterpret_cast<Node*>((*allocator_)(sizeof(Node)));
+    Node* result = reinterpret_cast<Node*>((allocator_)(sizeof(Node)));
     if (result != NULL) {
       memset(result, 0, sizeof(*result));
     }
@@ -239,8 +275,7 @@ class TCMalloc_PageMap3 {
  public:
   typedef uintptr_t Number;
 
-  explicit TCMalloc_PageMap3(void* (*allocator)(size_t)) {
-    allocator_ = allocator;
+  explicit TCMalloc_PageMap3(void* (*allocator)(size_t)) : allocator_(allocator) {
     root_ = NewNode();
   }
 
@@ -281,7 +316,7 @@ class TCMalloc_PageMap3 {
 
       // Make leaf node if necessary
       if (root_->ptrs[i1]->ptrs[i2] == NULL) {
-        Leaf* leaf = reinterpret_cast<Leaf*>((*allocator_)(sizeof(Leaf)));
+        Leaf* leaf = reinterpret_cast<Leaf*>((allocator_)(sizeof(Leaf)));
         if (leaf == NULL) return false;
         memset(leaf, 0, sizeof(*leaf));
         root_->ptrs[i1]->ptrs[i2] = reinterpret_cast<Node*>(leaf);
