@@ -116,6 +116,18 @@ Span* PageHeap::New(Length n) {
   if (result != NULL)
     return result;
 
+  // we're about to grow heap. Instead of just doing that consider
+  // releasing all free pages to OS. So that all free spans will be
+  // put on returned freelist and coalesced as much as possible.
+  ReleaseAtLeastNPages(static_cast<Length>(0x7fffffff));
+
+  // then try again. If we are forced to grow heap because of large
+  // spans fragmentation, then at the very least we've just unmapped
+  // free but insufficiently big large spans back to OS. So we'll be
+  // consuming virtual address space, but not real memory
+  result = SearchFreeAndLargeLists(n);
+  if (result != NULL) return result;
+
   // Grow the heap and try again.
   if (!GrowHeap(n)) {
     ASSERT(Check());
