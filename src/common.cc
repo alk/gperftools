@@ -33,6 +33,7 @@
 #include "config.h"
 #include "common.h"
 #include "system-alloc.h"
+#include "base/spinlock.h"
 
 namespace tcmalloc {
 
@@ -197,6 +198,8 @@ static const size_t kMetadataAllignment = sizeof(void *);
 static char *metadata_chunk_alloc_;
 static size_t metadata_chunk_avail_;
 
+static SpinLock metadata_alloc_lock(SpinLock::LINKER_INITIALIZED);
+
 void* MetaDataAlloc(size_t bytes) {
   if (bytes >= kMetadataAllocChunkSize) {
     void *rv = TCMalloc_SystemAlloc(kMetadataAllocChunkSize,
@@ -206,6 +209,8 @@ void* MetaDataAlloc(size_t bytes) {
     }
     return rv;
   }
+
+  SpinLockHolder h(&metadata_alloc_lock);
 
   // the following works by essentially turning address to integer of
   // log_2 kMetadataAllignment size and negating it. I.e. negated
