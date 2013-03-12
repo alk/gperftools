@@ -413,10 +413,17 @@ EXTERN_C int getpagesize();   /* in port.cc */
 
 inline void srandom(unsigned int seed) { srand(seed); }
 inline long random(void) { return rand(); }
+
+#ifndef HAVE_DECL_SLEEP
+#define HAVE_DECL_SLEEP 0
+#endif
+
+#if !HAVE_DECL_SLEEP
 inline unsigned int sleep(unsigned int seconds) {
   Sleep(seconds * 1000);
   return 0;
 }
+#endif
 
 // mingw64 seems to define timespec (though mingw.org mingw doesn't),
 // protected by the _TIMESPEC_DEFINED macro.

@@ -151,6 +151,9 @@ AC_CHECK_DECLS([cfree,
                 #include <stdlib.h>
                 #include <malloc.h>])
 
+dnl only very recent mingw has sleep
+AC_CHECK_DECLS([sleep], [#include <unistd.h>])
+
 if test "$ac_cv_type_struct_mallinfo" = yes; then
   AC_SUBST(ac_cv_have_struct_mallinfo, 1)   # gperftools/tcmalloc.h needs this
 else
