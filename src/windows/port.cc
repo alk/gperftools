@@ -46,6 +46,7 @@
 #include "base/spinlock.h"
 #include "internal_logging.h"
 #include "system-alloc.h"
+#include "common.h"
 
 // -----------------------------------------------------------------------
 // Basic libraries
@@ -223,42 +224,102 @@ SysAllocator* sys_alloc = NULL;
 // Number of bytes taken from system.
 size_t TCMalloc_SystemTaken = 0;
 
-// This is mostly like MmapSysAllocator::Alloc, except it does these weird
-// munmap's in the middle of the page, which is forbidden in windows.
+static char *alloc_reserved_at;
+static size_t alloc_reserved_size;
+static SpinLock alloc_spinlock(SpinLock::LINKER_INITIALIZED);
+
+static const size_t kVMReserveChunkSize = 128*1024*1024;
+
+static void *AllocDirectly(size_t size, size_t *actual_size,
+                           size_t alignment) {
+  size_t pagesize = static_cast<size_t>(getpagesize());
+
+  size_t reserve_size = size + pagesize;
+  if (alignment > pagesize) {
+    reserve_size += alignment;
+  }
+  reserve_size = tcmalloc::AlignUp(reserve_size, pagesize);
+  size = tcmalloc::AlignUp(size, pagesize);
+  void *alloc = VirtualAlloc(0, reserve_size, MEM_RESERVE, PAGE_READWRITE);
+  if (alloc == NULL) {
+    return alloc;
+  }
+  uintptr_t place = reinterpret_cast<uintptr_t>(alloc);
+  uintptr_t aligned_place = tcmalloc::AlignUp(place, static_cast<uintptr_t>(alignment));
+  assert(aligned_place + size <= place + reserve_size - pagesize);
+
+  void *rv = VirtualAlloc(reinterpret_cast<void *>(aligned_place),
+                          size, MEM_COMMIT, PAGE_READWRITE);
+  if (rv == NULL) {
+    VirtualFree(alloc, reserve_size, MEM_RELEASE);
+    return NULL;
+  }
+
+  if (actual_size) {
+    *actual_size = size;
+  }
+  return rv;
+}
+
+static intptr_t GetAlignmentAddup(char *ptr, size_t alignment) {
+  return -reinterpret_cast<intptr_t>(ptr) & (alignment - 1);
+}
+
 extern void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
                                   size_t alignment) {
-  // Align on the pagesize boundary
-  const int pagesize = getpagesize();
-  if (alignment < pagesize) alignment = pagesize;
-  size = ((size + alignment - 1) / alignment) * alignment;
+  assert(tcmalloc::IsPowerOf2(alignment));
 
-  // Safest is to make actual_size same as input-size.
+  if (size + alignment > kVMReserveChunkSize/16) {
+    return AllocDirectly(size, actual_size, alignment);
+  }
+
+  int pagesize = getpagesize();
+
+  SpinLockHolder h(&alloc_spinlock);
+
+  intptr_t alignment_addup;
+
+  alignment_addup = GetAlignmentAddup(alloc_reserved_at, alignment);
+
+  if (alignment_addup + size >= alloc_reserved_size) {
+    void *rv = VirtualAlloc(0, kVMReserveChunkSize, MEM_RESERVE, PAGE_READWRITE);
+    alloc_reserved_at = static_cast<char *>(rv);
+    if (alloc_reserved_at == NULL) {
+      return NULL;
+    }
+    alloc_reserved_size = kVMReserveChunkSize - pagesize;
+    alignment_addup = GetAlignmentAddup(alloc_reserved_at, alignment);
+
+    assert(alignment_addup + size < alloc_reserved_size);
+  }
+
+  char *result = alloc_reserved_at + alignment_addup;
+
+  uintptr_t commit_begin = reinterpret_cast<uintptr_t>(result);
+  commit_begin = tcmalloc::AlignUp(commit_begin, static_cast<uintptr_t>(pagesize));
+
+  char *new_alloc_reserved_at = result + size;
+
+  uintptr_t commit_end = reinterpret_cast<uintptr_t>(new_alloc_reserved_at);
+  commit_end = tcmalloc::AlignUp(commit_end, static_cast<uintptr_t>(pagesize));
+
+  if (commit_end != commit_begin) {
+    void *rv = VirtualAlloc(reinterpret_cast<void *>(commit_begin),
+                            commit_end - commit_begin, MEM_COMMIT, PAGE_READWRITE);
+    if (rv == NULL) {
+      return NULL;
+    }
+  }
+
+  alloc_reserved_at = new_alloc_reserved_at;
+
   if (actual_size) {
     *actual_size = size;
   }
 
-  // Ask for extra memory if alignment > pagesize
-  size_t extra = 0;
-  if (alignment > pagesize) {
-    extra = alignment - pagesize;
-  }
+  TCMalloc_SystemTaken += size;
 
-  void* result = VirtualAlloc(0, size + extra,
-                              MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
-  if (result == NULL)
-    return NULL;
-
-  TCMalloc_SystemTaken += size + extra;
-
-  // Adjust the return memory so it is aligned
-  uintptr_t ptr = reinterpret_cast<uintptr_t>(result);
-  size_t adjust = 0;
-  if ((ptr & (alignment - 1)) != 0) {
-    adjust = alignment - (ptr & (alignment - 1));
-  }
-
-  ptr += adjust;
-  return reinterpret_cast<void*>(ptr);
+  return static_cast<void *>(result);
 }
 
 bool TCMalloc_SystemRelease(void* start, size_t length) {

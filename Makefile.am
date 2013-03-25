@@ -580,7 +580,7 @@ if MINGW
 addressmap_unittest_SOURCES += src/windows/port.h src/windows/port.cc
 endif MINGW
 addressmap_unittest_CXXFLAGS = -g $(AM_CXXFLAGS)
-addressmap_unittest_LDADD = liblogging.la
+addressmap_unittest_LDADD = $(LIBSPINLOCK)
 
 if !MINGW
 TESTS += system_alloc_unittest
