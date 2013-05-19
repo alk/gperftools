@@ -88,10 +88,27 @@ int GET_STACK_TRACE_OR_FRAMES {
   }
   ++recursive;
 
+#if (IS_WITH_CONTEXT && (defined(__i386__) || defined(__x86_64__)) && defined(__GNU_LIBRARY__))
+  if (ucp) {
+    uc = *(unw_context_t *)ucp;
+    /* this is a bit weird. profiler.cc calls us with signal's ucontext
+     * yet passing us 2 as skip_count and essentially assuming we won't
+     * use ucontext. */
+    /* In order to fix that I'm going to assume that if ucp is
+     * non-null we're asked to ignore skip_count in case we're
+     * able to use ucp */
+    skip_count = 0;
+  } else {
+    unw_getcontext(&uc);
+    skip_count++;         // Do not include current frame
+  }
+#else
   unw_getcontext(&uc);
+  skip_count++;         // Do not include current frame
+#endif
+
   int ret = unw_init_local(&cursor, &uc);
   assert(ret >= 0);
-  skip_count++;         // Do not include current frame
 
   while (skip_count--) {
     if (unw_step(&cursor) <= 0) {
