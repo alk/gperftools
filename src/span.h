@@ -41,17 +41,20 @@
 
 namespace tcmalloc {
 
+struct SkiplistNode;
+
 // Information kept for a span (a contiguous run of pages).
 struct Span {
-  PageID        start;          // Starting page number
-  Length        length;         // Number of pages in span
-  Span*         next;           // Used when in link list
-  Span*         prev;           // Used when in link list
-  void*         objects;        // Linked list of free objects
-  unsigned int  refcount : 16;  // Number of non-free objects
-  unsigned int  sizeclass : 8;  // Size-class for small objects (or 0)
-  unsigned int  location : 2;   // Is the span on a freelist, and if so, which?
-  unsigned int  sample : 1;     // Sampled object?
+  PageID        start;             // Starting page number
+  Length        length;            // Number of pages in span
+  Span*         next;              // Used when in link list
+  Span*         prev;              // Used when in link list
+  void*         objects;           // Linked list of free objects
+  unsigned int  refcount : 16;     // Number of non-free objects
+  unsigned int  sizeclass : 8;     // Size-class for small objects (or 0)
+  unsigned int  location : 2;      // Is the span on a freelist, and if so, which?
+  unsigned int  sample : 1;        // Sampled object?
+  SkiplistNode* skiplist_node_ptr; // Make Skiplist removal constant-time
 
 #undef SPAN_HISTORY
 #ifdef SPAN_HISTORY
@@ -74,6 +77,18 @@ void Event(Span* span, char op, int v = 0);
 // Allocator/deallocator for spans
 Span* NewSpan(PageID p, Length len);
 void DeleteSpan(Span* span);
+
+// Span compare for skip list
+inline int SpanCompare(Span* a, Span* b) {
+  if (a == NULL ||
+      (a->length < b->length || (a->length == b->length && a->start < b->start))) {
+    return -1;
+  } else if (a->length >= b->length && a->start > b->start) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
 
 // -------------------------------------------------------------------------
 // Doubly linked list of spans.

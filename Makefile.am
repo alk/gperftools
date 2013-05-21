@@ -426,6 +426,7 @@ S_TCMALLOC_MINIMAL_INCLUDES = src/common.h \
                               src/libc_override_redefine.h \
                               src/page_heap.h \
                               src/page_heap_allocator.h \
+                              src/skiplist.h \
                               src/span.h \
                               src/static_vars.h \
                               src/symbolize.h \
@@ -457,6 +458,7 @@ libtcmalloc_minimal_internal_la_SOURCES = src/common.cc \
                                           src/central_freelist.cc \
                                           src/page_heap.cc \
                                           src/sampler.cc \
+                                          src/skiplist.cc \
                                           src/span.cc \
                                           src/stack_trace_table.cc \
                                           src/static_vars.cc \
