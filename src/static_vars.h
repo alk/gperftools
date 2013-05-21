@@ -42,6 +42,7 @@
 #include "common.h"
 #include "page_heap.h"
 #include "page_heap_allocator.h"
+#include "skiplist.h"
 #include "span.h"
 #include "stack_trace_table.h"
 
@@ -70,6 +71,10 @@ class Static {
 
   static PageHeapAllocator<Span>* span_allocator() { return &span_allocator_; }
 
+  static PageHeapAllocator<SkiplistNode>* skiplist_node_allocator() {
+    return &skiplist_node_allocator_;
+  }
+
   static PageHeapAllocator<StackTrace>* stacktrace_allocator() {
     return &stacktrace_allocator_;
   }
@@ -97,6 +102,7 @@ class Static {
   static SizeMap sizemap_;
   static CentralFreeListPadded central_cache_[kNumClasses];
   static PageHeapAllocator<Span> span_allocator_;
+  static PageHeapAllocator<SkiplistNode> skiplist_node_allocator_;
   static PageHeapAllocator<StackTrace> stacktrace_allocator_;
   static Span sampled_objects_;
   static PageHeapAllocator<StackTraceTable::Bucket> bucket_allocator_;

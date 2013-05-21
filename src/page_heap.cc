@@ -65,8 +65,10 @@ PageHeap::PageHeap()
     : pagemap_(MetaDataAlloc),
       pagemap_cache_(0),
       scavenge_counter_(0),
+      large_lists_size_(0),
       // Start scavenging at kMaxPages list
-      release_index_(kMaxPages) {
+      release_index_(kMaxPages),
+      using_large_skiplist_(false) {
   COMPILE_ASSERT(kNumClasses <= (1 << PageMapCache::kValuebits), valuebits);
   DLL_Init(&large_.normal);
   DLL_Init(&large_.returned);
@@ -164,37 +166,39 @@ Span* PageHeap::AllocLarge(Length n) {
   // The following loops implements address-ordered best-fit.
   Span *best = NULL;
 
-  // Search through normal list
-  for (Span* span = large_.normal.next;
-       span != &large_.normal;
-       span = span->next) {
-    if (span->length >= n) {
-      if ((best == NULL)
-          || (span->length < best->length)
-          || ((span->length == best->length) && (span->start < best->start))) {
-        best = span;
-        ASSERT(best->location == Span::ON_NORMAL_FREELIST);
+  if (!using_large_skiplist_) {
+    // Search through normal list
+    for (Span* span = large_.normal.next;
+	 span != &large_.normal;
+	 span = span->next) {
+      if (span->length >= n) {
+	if ((best == NULL)
+	    || (span->length < best->length)
+	    || ((span->length == best->length) && (span->start < best->start))) {
+	  best = span;
+	  ASSERT(best->location == Span::ON_NORMAL_FREELIST);
+	}
       }
     }
-  }
 
-  Span *bestNormal = best;
-
-  // Search through released list in case it has a better fit
-  for (Span* span = large_.returned.next;
-       span != &large_.returned;
-       span = span->next) {
-    if (span->length >= n) {
-      if ((best == NULL)
-          || (span->length < best->length)
-          || ((span->length == best->length) && (span->start < best->start))) {
-        best = span;
-        ASSERT(best->location == Span::ON_RETURNED_FREELIST);
+    // Search through released list in case it has a better fit
+    for (Span* span = large_.returned.next;
+	 span != &large_.returned;
+	 span = span->next) {
+      if (span->length >= n) {
+	if ((best == NULL)
+	    || (span->length < best->length)
+	    || ((span->length == best->length) && (span->start < best->start))) {
+	  best = span;
+	  ASSERT(best->location == Span::ON_RETURNED_FREELIST);
+	}
       }
     }
+  } else {
+    best = large_skiplist_.GetBestFit(n);
   }
 
-  if (best == bestNormal) {
+  if (best->location == Span::ON_NORMAL_FREELIST) {
     return best == NULL ? NULL : Carve(best, n);
   }
 
@@ -315,7 +319,22 @@ void PageHeap::MergeIntoFreeList(Span* span) {
 
 void PageHeap::PrependToFreeList(Span* span) {
   ASSERT(span->location != Span::IN_USE);
-  SpanList* list = (span->length < kMaxPages) ? &free_[span->length] : &large_;
+  SpanList* list;
+
+  if (span->length < kMaxPages) {
+    list = &free_[span->length];
+  } else {
+    list = &large_;
+    large_lists_size_++;
+    if (large_lists_size_ == kLargeSkiplistThreshold && !using_large_skiplist_) {
+      InitializeLargeSkiplist();
+    }
+
+    if (using_large_skiplist_) {
+      large_skiplist_.Insert(span);
+    }
+  }
+  
   if (span->location == Span::ON_NORMAL_FREELIST) {
     stats_.free_bytes += (span->length << kPageShift);
     DLL_Prepend(&list->normal, span);
@@ -332,6 +351,15 @@ void PageHeap::RemoveFromFreeList(Span* span) {
   } else {
     stats_.unmapped_bytes -= (span->length << kPageShift);
   }
+
+  if (span->length >= kMaxPages) {
+    if (using_large_skiplist_) {
+      large_skiplist_.Remove(span);
+    }
+
+    large_lists_size_--;
+  }
+
   DLL_Remove(span);
 }
 
@@ -582,6 +610,25 @@ bool PageHeap::CheckList(Span* list, Length min_pages, Length max_pages,
     CHECK_CONDITION(GetDescriptor(s->start+s->length-1) == s);
   }
   return true;
+}
+
+void PageHeap::InitializeLargeSkiplist() {
+  fprintf(stderr, "tcmalloc: skiplist threshold reached\n");
+
+  using_large_skiplist_ = true;
+  large_skiplist_.Init();
+
+  for (Span* span = large_.normal.next;
+      span != &large_.normal;
+      span = span->next) {
+    large_skiplist_.Insert(span);
+  }
+
+  for (Span* span = large_.returned.next;
+      span != &large_.returned;
+      span = span->next) {
+    large_skiplist_.Insert(span);
+  }
 }
 
 }  // namespace tcmalloc
