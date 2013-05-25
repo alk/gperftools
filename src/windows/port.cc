@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 /* Copyright (c) 2007, Google Inc.
  * All rights reserved.
  * 
@@ -224,12 +225,6 @@ SysAllocator* sys_alloc = NULL;
 // Number of bytes taken from system.
 size_t TCMalloc_SystemTaken = 0;
 
-static char *alloc_reserved_at;
-static size_t alloc_reserved_size;
-static SpinLock alloc_spinlock(SpinLock::LINKER_INITIALIZED);
-
-static const size_t kVMReserveChunkSize = 128*1024*1024;
-
 static void *AllocDirectly(size_t size, size_t *actual_size,
                            size_t alignment) {
   size_t pagesize = static_cast<size_t>(getpagesize());
@@ -261,15 +256,62 @@ static void *AllocDirectly(size_t size, size_t *actual_size,
   return rv;
 }
 
+// we're MEM_RESERVE-ing memory from OS in chunks of this size.
+// we assume it's multiple of getpagesize()
+static const size_t kVMReserveChunkSize = 128*1024*1024;
+
+// allocations larger than this size will be VirtualAlloc-ed directly
+// rather than being MEM_COMMIT-ed from
+// [alloc_reserved_at,alloc_reserved_at+alloc_reserved_size) region as
+// usual
+//
+// NOTE: that this is smaller than kMetadataAllocChunkSize in
+// common.cc. That causes additional goodness of separating metadata
+// and data allocations. Otherwise chunks metadata allocations between
+// data allocations could prevent us from coalescing some free page
+// spans.
+static const size_t kVMReserveTooBigWaste = kVMReserveChunkSize / 32;
+
+// this is start of MEM_RESERVE-ed area that we're going to return in
+// TCMalloc_SystemAlloc
+static char *alloc_reserved_at;
+// and that's size of this area
+static size_t alloc_reserved_size;
+// and that's spinlock that guards memory allocations from this region
+// as well as any other changes of alloc_* variables
+static SpinLock alloc_spinlock(SpinLock::LINKER_INITIALIZED);
+
+// returns count of bytes you need to add to ptr to round up to
+// closest address aligned on alignment. If ptr is already aligned
+// returns 0. It should be easy to see that returned value must be
+// strictly less then alignment
+//
+// Alignment is assumed to be power of 2
 static intptr_t GetAlignmentAddup(char *ptr, size_t alignment) {
-  return -reinterpret_cast<intptr_t>(ptr) & (alignment - 1);
+  // negation here returns how much we need to add to get 0. Rules of
+  // negation are in fact independent of desired bitness
+  // (bitwise-negate and increment). Our desired bitness is
+  // log_2(alignment). And masking off everything at and above that
+  // bit gives us precisely what we need. Number we need to add to get
+  // log_2(alignment) lowest bits at 0. It can be easily verified that
+  // already aligned ptr will produce result of 0 (similarly how
+  // arithmetic negate of 0 is still 0).
+  return (-reinterpret_cast<intptr_t>(ptr)) & (alignment - 1);
 }
 
 extern void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
                                   size_t alignment) {
   assert(tcmalloc::IsPowerOf2(alignment));
 
-  if (size + alignment > kVMReserveChunkSize/16) {
+  // Too big allocations may force us to drop reserved chunk that
+  // still has plenty of reserved address space left. So we just do
+  // those big allocations directly, i.e. outside of our reserved
+  // chunk.
+  //
+  // Things will fail miserably if size + alignment overflows
+  // size_t. We don't ask for huge alignment so it should be fine to
+  // just check for big size
+  if (size + alignment > kVMReserveTooBigWaste || size > kVMReserveTooBigWaste) {
     return AllocDirectly(size, actual_size, alignment);
   }
 
@@ -282,26 +324,83 @@ extern void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
   alignment_addup = GetAlignmentAddup(alloc_reserved_at, alignment);
 
   if (alignment_addup + size >= alloc_reserved_size) {
+    // if we don't have enough space reserved for current allocation,
+    // we just drop current address space chunk and reserve new.
     void *rv = VirtualAlloc(0, kVMReserveChunkSize, MEM_RESERVE, PAGE_READWRITE);
-    alloc_reserved_at = static_cast<char *>(rv);
-    if (alloc_reserved_at == NULL) {
+    if (rv == NULL) {
       return NULL;
     }
+    alloc_reserved_at = static_cast<char *>(rv);
+    // Windows doesn't allow MEM_RESET that covers two or more regions
+    // returned from MEM_RESERVE.
+    //
+    // So we're leaving one page unused at the end of reserved
+    // chunk. That's to prevent us from coalescing page spans
+    // belonging to different MEM_RESERVE chunks, which could
+    // eventually lead us to try to MEM_RESET that larger span
     alloc_reserved_size = kVMReserveChunkSize - pagesize;
+    // requested alignment can be bigger than natural alignment of
+    // stuff we've got from VirtualAlloc. So alignment_addup needs to
+    // be properly recomputed
     alignment_addup = GetAlignmentAddup(alloc_reserved_at, alignment);
 
+    // because of AllocDirectly check above and because
+    // alignment_addup must be smaller than alignment we're sure we
+    // cannot fail this check. I.e. if this check fails then
+    // alignment_addup + size is almost as big as kVMReserveChunkSize
+    // which is certainly larger than kVMReserveTooBigWaste. And given
+    // alignment_addup is smaller than alignment, we know alignment +
+    // size is even bigger. So this cannot happen.
     assert(alignment_addup + size < alloc_reserved_size);
+
+    // we know alloc_reserved_at is page aligned and thus
+    // alignment_addup should be page aligned too.
+    //
+    // we'll use that assertion below to ensure commit_begin == result
+    // if we're hitting this path
+    assert((alignment_addup & (pagesize - 1)) == 0);
   }
 
   char *result = alloc_reserved_at + alignment_addup;
 
+  // we need to MEM_COMMIT memory segment we're returning. Committing
+  // happens on page boundaries and pages cannot be committed twice so
+  // we have to be careful.
+
   uintptr_t commit_begin = reinterpret_cast<uintptr_t>(result);
+  // if previous allocation size was not aligned to pagesize and
+  // alignment_addup is smaller than page size, then we've already
+  // committed last page of previous allocation and first page of this
+  // allocation. So commit address is rounded up to next page size.
+  //
+  // Note that there's no previous allocation in case we've just
+  // reserved new chunk of address space, but in this case result is
+  // aligned on pagesize. See last assertion of MEM_RESERVE path
+  // above. So we'll start our commit request at result.
   commit_begin = tcmalloc::AlignUp(commit_begin, static_cast<uintptr_t>(pagesize));
 
   char *new_alloc_reserved_at = result + size;
 
   uintptr_t commit_end = reinterpret_cast<uintptr_t>(new_alloc_reserved_at);
   commit_end = tcmalloc::AlignUp(commit_end, static_cast<uintptr_t>(pagesize));
+  // commit_end is easily past memory segment we're allocating
+  // (because we're aligning up). So [commit_begin, commit_end) covers
+  // it. And both commit_begin and commit_end are page aligned as
+  // required by VirtualAlloc.
+  //
+  // In order for MEM_COMMIT to work we also need commit_end to be
+  // less or equal than end of reserved area. This holds too. Because
+  // if new_alloc_reserved_at is page aligned then commit_end equals
+  // it (align up did not change it) and that means our condition
+  // holds. If it's not page aligned then it can only be greater if
+  // entire last page of our allocation is past reserved area which we
+  // know cannot be true. I.e. it would make byte
+  // new_alloc_reserved_at - 1 be past alloc_reserved_at +
+  // alloc_reserved_size, which is violation of our other assertions
+  // above. I.e. because alloc_reserved_at + alloc_reserved_size
+  // (address just past end of our address space reservation) is page
+  // aligned
+  assert(commit_end <= reinterpret_cast<intptr_t>(alloc_reserved_at) + alloc_reserved_size);
 
   if (commit_end != commit_begin) {
     void *rv = VirtualAlloc(reinterpret_cast<void *>(commit_begin),
@@ -311,6 +410,7 @@ extern void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
     }
   }
 
+  alloc_reserved_size -= new_alloc_reserved_at - alloc_reserved_at;
   alloc_reserved_at = new_alloc_reserved_at;
 
   if (actual_size) {
