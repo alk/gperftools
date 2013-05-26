@@ -288,6 +288,11 @@ static SpinLock alloc_spinlock(SpinLock::LINKER_INITIALIZED);
 //
 // Alignment is assumed to be power of 2
 static intptr_t GetAlignmentAddup(char *ptr, size_t alignment) {
+  if (alignment == 0) {
+    // alignment of 0 is same as alignment of 1 which is no alignment
+    // but code below cannot handle 0 properly.
+    return 0;
+  }
   // negation here returns how much we need to add to get 0. Rules of
   // negation are in fact independent of desired bitness
   // (bitwise-negate and increment). Our desired bitness is
