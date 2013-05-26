@@ -225,6 +225,31 @@ SysAllocator* sys_alloc = NULL;
 // Number of bytes taken from system.
 size_t TCMalloc_SystemTaken = 0;
 
+// we're MEM_RESERVE-ing memory from OS in chunks of this size.
+// we assume it's multiple of getpagesize()
+static const size_t kVMReserveChunkSize = 128*1024*1024;
+
+// allocations larger than this size will be VirtualAlloc-ed directly
+// rather than being MEM_COMMIT-ed from
+// [alloc_reserved_at,alloc_reserved_at+alloc_reserved_size) region as
+// usual
+//
+// NOTE: that this is smaller than kMetadataAllocChunkSize in
+// common.cc. That causes additional goodness of separating metadata
+// and data allocations. Otherwise chunks metadata allocations between
+// data allocations could prevent us from coalescing some free page
+// spans.
+static const size_t kVMReserveTooBigWaste = kVMReserveChunkSize / 32;
+
+// this is start of MEM_RESERVE-ed area that we're going to return in
+// TCMalloc_SystemAlloc
+static char *alloc_reserved_at;
+// and that's size of this area
+static size_t alloc_reserved_size;
+// and that's spinlock that guards memory allocations from this region
+// as well as any other changes of alloc_* variables and TCMalloc_SystemTaken
+static SpinLock alloc_spinlock(SpinLock::LINKER_INITIALIZED);
+
 static void *AllocDirectly(size_t size, size_t *actual_size,
                            size_t alignment) {
   size_t pagesize = static_cast<size_t>(getpagesize());
@@ -253,33 +278,12 @@ static void *AllocDirectly(size_t size, size_t *actual_size,
   if (actual_size) {
     *actual_size = size;
   }
+
+  SpinLockHolder h(&alloc_spinlock);
+  TCMalloc_SystemTaken += size;
+
   return rv;
 }
-
-// we're MEM_RESERVE-ing memory from OS in chunks of this size.
-// we assume it's multiple of getpagesize()
-static const size_t kVMReserveChunkSize = 128*1024*1024;
-
-// allocations larger than this size will be VirtualAlloc-ed directly
-// rather than being MEM_COMMIT-ed from
-// [alloc_reserved_at,alloc_reserved_at+alloc_reserved_size) region as
-// usual
-//
-// NOTE: that this is smaller than kMetadataAllocChunkSize in
-// common.cc. That causes additional goodness of separating metadata
-// and data allocations. Otherwise chunks metadata allocations between
-// data allocations could prevent us from coalescing some free page
-// spans.
-static const size_t kVMReserveTooBigWaste = kVMReserveChunkSize / 32;
-
-// this is start of MEM_RESERVE-ed area that we're going to return in
-// TCMalloc_SystemAlloc
-static char *alloc_reserved_at;
-// and that's size of this area
-static size_t alloc_reserved_size;
-// and that's spinlock that guards memory allocations from this region
-// as well as any other changes of alloc_* variables
-static SpinLock alloc_spinlock(SpinLock::LINKER_INITIALIZED);
 
 // returns count of bytes you need to add to ptr to round up to
 // closest address aligned on alignment. If ptr is already aligned
