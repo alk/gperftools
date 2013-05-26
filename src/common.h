@@ -146,21 +146,22 @@ namespace tcmalloc {
 
 template <typename T>
 inline bool IsPowerOf2(T value) {
-    return ((value - 1) & value) == 0;
+  return ((value - 1) & value) == 0;
 }
 
 // returns smallest value x where:
 //    x % power_of_2 == 0 && x >= value
 template <typename T>
 inline T AlignUp(T value, T power_of_2) {
-    assert(IsPowerOf2(power_of_2));
-    return (value + power_of_2 - 1) & ~(power_of_2 - 1);
+  assert(IsPowerOf2(power_of_2));
+  return (value + power_of_2 - 1) & ~(power_of_2 - 1);
 }
 
 // Convert byte size into pages.  This won't overflow, but may return
 // an unreasonably large value if bytes is huge enough.
 inline Length pages(size_t bytes) {
-    return (bytes + kPageSize - 1) >> kPageShift;
+  return (bytes >> kPageShift) +
+      ((bytes & (kPageSize - 1)) > 0 ? 1 : 0);
 }
 
 // For larger allocation sizes, we use larger memory alignments to
