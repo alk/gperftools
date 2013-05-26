@@ -234,12 +234,12 @@ static const size_t kVMReserveChunkSize = 128*1024*1024;
 // [alloc_reserved_at,alloc_reserved_at+alloc_reserved_size) region as
 // usual
 //
-// NOTE: that this is smaller than kMetadataAllocChunkSize in
-// common.cc. That causes additional goodness of separating metadata
-// and data allocations. Otherwise chunks metadata allocations between
-// data allocations could prevent us from coalescing some free page
-// spans.
-static const size_t kVMReserveTooBigWaste = kVMReserveChunkSize / 32;
+// NOTE: that this is smaller than kMetadataAllocChunkSize +
+// kMetadataAllignment in common.cc. That causes additional goodness
+// of separating metadata and data allocations. Otherwise chunks
+// metadata allocations between data allocations could prevent us from
+// coalescing some free page spans.
+static const size_t kVMReserveTooBigWaste = kVMReserveChunkSize / 16;
 
 // this is start of MEM_RESERVE-ed area that we're going to return in
 // TCMalloc_SystemAlloc
