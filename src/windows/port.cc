@@ -299,7 +299,8 @@ static intptr_t GetAlignmentAddup(char *ptr, size_t alignment) {
   return (-reinterpret_cast<intptr_t>(ptr)) & (alignment - 1);
 }
 
-extern void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
+extern PERFTOOLS_DLL_DECL
+void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
                                   size_t alignment) {
   assert(tcmalloc::IsPowerOf2(alignment));
 
@@ -422,6 +423,7 @@ extern void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
   return static_cast<void *>(result);
 }
 
+extern PERFTOOLS_DLL_DECL
 bool TCMalloc_SystemRelease(void* start, size_t length) {
   void* result = VirtualAlloc(start, length,
                               MEM_RESET, PAGE_READWRITE);
