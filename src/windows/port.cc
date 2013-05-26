@@ -301,7 +301,7 @@ static intptr_t GetAlignmentAddup(char *ptr, size_t alignment) {
 
 extern PERFTOOLS_DLL_DECL
 void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
-                                  size_t alignment) {
+                           size_t alignment) {
   assert(tcmalloc::IsPowerOf2(alignment));
 
   // Too big allocations may force us to drop reserved chunk that
