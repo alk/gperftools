@@ -17,7 +17,7 @@
  * For instructions on how to use this mode, see
  * http://groups.google.com/group/google-perftools/browse_thread/thread/41cd3710af85e57b
  */
-#undef WIN32_OVERRIDE_ALLOCATORS
+//#undef WIN32_OVERRIDE_ALLOCATORS
 
 /* Define to 1 if your libc has a snprintf implementation */
 #undef HAVE_SNPRINTF
@@ -125,7 +125,7 @@
 #undef HAVE_SCHED_H
 
 /* Define to 1 if you have the <stdint.h> header file. */
-#undef HAVE_STDINT_H
+#define HAVE_STDINT_H 1
 
 /* Define to 1 if you have the <stdlib.h> header file. */
 #define HAVE_STDLIB_H 1

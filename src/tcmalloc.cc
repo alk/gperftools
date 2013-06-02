@@ -934,7 +934,7 @@ TCMallocGuard::~TCMallocGuard() {
     }
   }
 }
-#ifndef WIN32_OVERRIDE_ALLOCATORS
+#ifndef WIN32_OVERRIDE_ALLOCATORS_sdsds
 static TCMallocGuard module_enter_exit_hook;
 #endif
 
