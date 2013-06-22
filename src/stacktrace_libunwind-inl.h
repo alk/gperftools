@@ -58,6 +58,9 @@ extern "C" {
 // cases, we return 0 to indicate the situation.
 static __thread int recursive;
 
+/* see https://github.com/alk/unwind_safeness_helper */
+extern __attribute__((weak)) int unwind_safeness_get(void);
+
 #endif  // BASE_STACKTRACE_LIBINWIND_INL_H_
 
 // Note: this part of the file is included several times.
@@ -84,6 +87,9 @@ int GET_STACK_TRACE_OR_FRAMES {
 #endif
 
   if (recursive) {
+    return 0;
+  }
+  if (unwind_safeness_get && !unwind_safeness_get()) {
     return 0;
   }
   ++recursive;
