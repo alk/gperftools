@@ -44,6 +44,7 @@
 #include "base/logging.h"               // for Check_GEImpl, Check_LTImpl, etc
 #include <gperftools/malloc_extension.h>    // for MallocExtension::instance
 #include "common.h"                     // for kAddressBits
+#include "force_use.h"
 
 class ArraySysAllocator : public SysAllocator {
 public:
@@ -101,6 +102,7 @@ static void TestBasicInvoked() {
   // An allocation size that is likely to trigger the system allocator.
   // XXX: this is implementation specific.
   char *p = new char[1024 * 1024];
+  force_use(p);
   delete [] p;
 
   // Make sure that our allocator was invoked.
@@ -137,10 +139,13 @@ static void TestBasicRetryFailTest() {
   const size_t kHugeSize = (std::numeric_limits<size_t>::max)() / 2;
   void* p1 = malloc(kHugeSize);
   void* p2 = malloc(kHugeSize);
+  force_use(p1);
+  force_use(p2);
   CHECK(p2 == NULL);
   if (p1 != NULL) free(p1);
 
   char* q = new char[1024];
+  force_use(q);
   CHECK(q != NULL);
   delete [] q;
 }

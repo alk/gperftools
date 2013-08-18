@@ -41,6 +41,7 @@
 #include <set>                          // for set, etc
 
 #include "base/logging.h"               // for operator<<, CHECK, etc
+#include "force_use.h"
 
 using std::set;
 
@@ -48,12 +49,15 @@ using std::set;
 
 void TryAllocExpectFail(size_t size) {
   void* p1 = malloc(size);
+  force_use(p1);
   CHECK(p1 == NULL);
 
   void* p2 = malloc(1);
+  force_use(p2);
   CHECK(p2 != NULL);
 
   void* p3 = realloc(p2, size);
+  force_use(p3);
   CHECK(p3 == NULL);
 
   free(p2);
@@ -64,6 +68,7 @@ void TryAllocExpectFail(size_t size) {
 
 void TryAllocMightFail(size_t size) {
   unsigned char* p = static_cast<unsigned char*>(malloc(size));
+  force_use(p);
   if ( p != NULL ) {
     unsigned char volatile* vp = p;  // prevent optimizations
     static const size_t kPoints = 1024;
@@ -93,6 +98,7 @@ int main (int argc, char** argv) {
     set<char*> p_set;
     for ( int i = 0; i < kZeroTimes; ++i ) {
       char* p = new char;
+      force_use(p);
       CHECK(p != NULL);
       CHECK(p_set.find(p) == p_set.end());
       p_set.insert(p_set.end(), p);
@@ -103,6 +109,7 @@ int main (int argc, char** argv) {
   // Grab some memory so that some later allocations are guaranteed to fail.
   printf("Test small malloc\n");
   void* p_small = malloc(4*1048576);
+  force_use(p_small);
   CHECK(p_small != NULL);
 
   // Test sizes up near the maximum size_t.

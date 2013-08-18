@@ -36,6 +36,8 @@
 #include "gperftools/malloc_extension.h"
 #include "base/logging.h"
 
+#include "force_use.h"
+
 using std::vector;
 
 vector<void (*)()> g_testlist;  // the tests to run
@@ -89,6 +91,7 @@ TEST(DebugAllocationTest, DeallocMismatch) {
   // Allocate with malloc.
   {
     int* x = static_cast<int*>(malloc(sizeof(*x)));
+    force_use(x);
     IF_DEBUG_EXPECT_DEATH(delete x, "mismatch.*being dealloc.*delete");
     IF_DEBUG_EXPECT_DEATH(delete [] x, "mismatch.*being dealloc.*delete *[[]");
     // Should work fine.
@@ -99,6 +102,8 @@ TEST(DebugAllocationTest, DeallocMismatch) {
   {
     int* x = new int;
     int* y = new int;
+    force_use(x);
+    force_use(y);
     IF_DEBUG_EXPECT_DEATH(free(x), "mismatch.*being dealloc.*free");
     IF_DEBUG_EXPECT_DEATH(delete [] x, "mismatch.*being dealloc.*delete *[[]");
     delete x;
@@ -109,6 +114,8 @@ TEST(DebugAllocationTest, DeallocMismatch) {
   {
     int* x = new int[1];
     int* y = new int[1];
+    force_use(x);
+    force_use(y);
     IF_DEBUG_EXPECT_DEATH(free(x), "mismatch.*being dealloc.*free");
     IF_DEBUG_EXPECT_DEATH(delete x, "mismatch.*being dealloc.*delete");
     delete [] x;
@@ -119,6 +126,8 @@ TEST(DebugAllocationTest, DeallocMismatch) {
   {
     int* x = new(std::nothrow) int;
     int* y = new(std::nothrow) int;
+    force_use(x);
+    force_use(y);
     IF_DEBUG_EXPECT_DEATH(free(x), "mismatch.*being dealloc.*free");
     IF_DEBUG_EXPECT_DEATH(delete [] x, "mismatch.*being dealloc.*delete *[[]");
     delete x;
@@ -129,6 +138,8 @@ TEST(DebugAllocationTest, DeallocMismatch) {
   {
     int* x = new(std::nothrow) int[1];
     int* y = new(std::nothrow) int[1];
+    force_use(x);
+    force_use(y);
     IF_DEBUG_EXPECT_DEATH(free(x), "mismatch.*being dealloc.*free");
     IF_DEBUG_EXPECT_DEATH(delete x, "mismatch.*being dealloc.*delete");
     delete [] x;
@@ -139,12 +150,14 @@ TEST(DebugAllocationTest, DeallocMismatch) {
 
 TEST(DebugAllocationTest, DoubleFree) {
   int* pint = new int;
+  force_use(pint);
   delete pint;
   IF_DEBUG_EXPECT_DEATH(delete pint, "has been already deallocated");
 }
 
 TEST(DebugAllocationTest, StompBefore) {
   int* pint = new int;
+  force_use(pint);
 #ifndef NDEBUG   // don't stomp memory if we're not in a position to detect it
   pint[-1] = 5;
   IF_DEBUG_EXPECT_DEATH(delete pint, "a word before object");
@@ -153,6 +166,7 @@ TEST(DebugAllocationTest, StompBefore) {
 
 TEST(DebugAllocationTest, StompAfter) {
   int* pint = new int;
+  force_use(pint);
 #ifndef NDEBUG   // don't stomp memory if we're not in a position to detect it
   pint[1] = 5;
   IF_DEBUG_EXPECT_DEATH(delete pint, "a word after object");
@@ -162,6 +176,7 @@ TEST(DebugAllocationTest, StompAfter) {
 TEST(DebugAllocationTest, FreeQueueTest) {
   // Verify that the allocator doesn't return blocks that were recently freed.
   int* x = new int;
+  force_use(x);
   int* old_x = x;
   delete x;
   x = new int;
@@ -189,11 +204,13 @@ TEST(DebugAllocationTest, DanglingPointerWriteTest) {
   // list of recently-freed blocks, so the following 'new' will be safe.
 #if 1
   int* x = new int;
+  force_use(x);
   delete x;
   int poisoned_x_value = *x;
   *x = 1;  // a dangling write.
 
   char* s = new char[FLAGS_max_free_queue_size];
+  force_use(s);
   // When we delete s, we push the storage that was previously allocated to x
   // off the end of the free queue.  At that point, the write to that memory
   // will be detected.
@@ -208,6 +225,7 @@ TEST(DebugAllocationTest, DanglingPointerWriteTest) {
 
 TEST(DebugAllocationTest, DanglingWriteAtExitTest) {
   int *x = new int;
+  force_use(x);
   delete x;
   int old_x_value = *x;
   *x = 1;
@@ -219,6 +237,7 @@ TEST(DebugAllocationTest, DanglingWriteAtExitTest) {
 
 TEST(DebugAllocationTest, StackTraceWithDanglingWriteAtExitTest) {
   int *x = new int;
+  force_use(x);
   delete x;
   int old_x_value = *x;
   *x = 1;
@@ -248,6 +267,7 @@ TEST(DebugAllocationTest, CurrentlyAllocated) {
   // Free something and check that it disappears from allocated bytes
   // immediately.
   char* p = new char[1000];
+  force_use(p);
   size_t after_malloc = CurrentlyAllocatedBytes();
   delete[] p;
   size_t after_free = CurrentlyAllocatedBytes();
@@ -261,11 +281,13 @@ TEST(DebugAllocationTest, GetAllocatedSizeTest) {
   // to write more than that.
   for (int i = 0; i < 10; ++i) {
     void *p = malloc(i);
+    force_use(p);
     EXPECT_EQ(i, MallocExtension::instance()->GetAllocatedSize(p));
     free(p);
   }
 #endif
   void* a = malloc(1000);
+  force_use(a);
   EXPECT_GE(MallocExtension::instance()->GetAllocatedSize(a), 1000);
   // This is just a sanity check.  If we allocated too much, alloc is broken
   EXPECT_LE(MallocExtension::instance()->GetAllocatedSize(a), 5000);
@@ -283,6 +305,7 @@ TEST(DebugAllocationTest, HugeAlloc) {
 #ifndef NDEBUG
 
   a = malloc(kTooBig);
+  force_use(a);
   EXPECT_EQ(NULL, a);
 
   // kAlsoTooBig is small enough not to get caught by debugallocation's check,
@@ -291,6 +314,7 @@ TEST(DebugAllocationTest, HugeAlloc) {
   size_t kAlsoTooBig = kTooBig - 1024;
 
   a = malloc(kAlsoTooBig);
+  force_use(a);
   EXPECT_EQ(NULL, a);
 #endif
 }

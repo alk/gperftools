@@ -95,6 +95,8 @@
 #include "system-alloc.h"
 #include "tests/testutil.h"
 
+#include "force_use.h"
+
 // Windows doesn't define pvalloc and a few other obsolete unix
 // functions; nor does it define posix_memalign (which is not obsolete).
 #if defined(_WIN32)
@@ -843,6 +845,8 @@ static void TestRanges() {
   static const int MB = 1048576;
   void* a = malloc(MB);
   void* b = malloc(MB);
+  force_use(a);
+  force_use(b);
   base::MallocRange::Type releasedType =
       HaveSystemRelease ? base::MallocRange::UNMAPPED : base::MallocRange::FREE;
 
@@ -882,6 +886,8 @@ static void TestReleaseToSystem() {
   static const int MB = 1048576;
   void* a = malloc(MB);
   void* b = malloc(MB);
+  force_use(a);
+  force_use(b);
   MallocExtension::instance()->ReleaseFreeMemory();
   size_t starting_bytes = GetUnmappedBytes();
 
@@ -918,6 +924,7 @@ static void TestReleaseToSystem() {
   EXPECT_EQ(starting_bytes + 2*MB, GetUnmappedBytes());
 
   a = malloc(MB);
+  force_use(a);
   free(a);
   EXPECT_EQ(starting_bytes + MB, GetUnmappedBytes());
 
@@ -1058,6 +1065,7 @@ static int RunAllTests(int argc, char** argv) {
     SetDeleteHook();   // ditto
 
     void* p1 = malloc(10);
+    force_use(p1);
     CHECK(p1 != NULL);    // force use of this variable
     VerifyNewHookWasCalled();
     // Also test the non-standard tc_malloc_size
@@ -1069,12 +1077,14 @@ static int RunAllTests(int argc, char** argv) {
 
 
     p1 = calloc(10, 2);
+    force_use(p1);
     CHECK(p1 != NULL);
     VerifyNewHookWasCalled();
     // We make sure we realloc to a big size, since some systems (OS
     // X) will notice if the realloced size continues to fit into the
     // malloc-block and make this a noop if so.
     p1 = realloc(p1, 30000);
+    force_use(p1);
     CHECK(p1 != NULL);
     VerifyNewHookWasCalled();
     VerifyDeleteHookWasCalled();
@@ -1083,12 +1093,14 @@ static int RunAllTests(int argc, char** argv) {
 
     if (kOSSupportsMemalign) {
       CHECK_EQ(PosixMemalign(&p1, sizeof(p1), 40), 0);
+      force_use(p1);
       CHECK(p1 != NULL);
       VerifyNewHookWasCalled();
       free(p1);
       VerifyDeleteHookWasCalled();
 
       p1 = Memalign(sizeof(p1) * 2, 50);
+      force_use(p1);
       CHECK(p1 != NULL);
       VerifyNewHookWasCalled();
       free(p1);
@@ -1098,6 +1110,7 @@ static int RunAllTests(int argc, char** argv) {
     // Windows has _aligned_malloc.  Let's test that that's captured too.
 #if (defined(_MSC_VER) || defined(__MINGW32__)) && !defined(PERFTOOLS_NO_ALIGNED_MALLOC)
     p1 = _aligned_malloc(sizeof(p1) * 2, 64);
+    force_use(p1);
     CHECK(p1 != NULL);
     VerifyNewHookWasCalled();
     _aligned_free(p1);
@@ -1106,35 +1119,41 @@ static int RunAllTests(int argc, char** argv) {
 
     p1 = valloc(60);
     CHECK(p1 != NULL);
+    force_use(p1);
     VerifyNewHookWasCalled();
     free(p1);
     VerifyDeleteHookWasCalled();
 
     p1 = pvalloc(70);
     CHECK(p1 != NULL);
+    force_use(p1);
     VerifyNewHookWasCalled();
     free(p1);
     VerifyDeleteHookWasCalled();
 
     char* p2 = new char;
+    force_use(p2);
     CHECK(p2 != NULL);
     VerifyNewHookWasCalled();
     delete p2;
     VerifyDeleteHookWasCalled();
 
     p2 = new char[100];
+    force_use(p2);
     CHECK(p2 != NULL);
     VerifyNewHookWasCalled();
     delete[] p2;
     VerifyDeleteHookWasCalled();
 
     p2 = new(std::nothrow) char;
+    force_use(p2);
     CHECK(p2 != NULL);
     VerifyNewHookWasCalled();
     delete p2;
     VerifyDeleteHookWasCalled();
 
     p2 = new(std::nothrow) char[100];
+    force_use(p2);
     CHECK(p2 != NULL);
     VerifyNewHookWasCalled();
     delete[] p2;
@@ -1142,6 +1161,7 @@ static int RunAllTests(int argc, char** argv) {
 
     // Another way of calling operator new
     p2 = static_cast<char*>(::operator new(100));
+    force_use(p2);
     CHECK(p2 != NULL);
     VerifyNewHookWasCalled();
     ::operator delete(p2);
@@ -1149,6 +1169,7 @@ static int RunAllTests(int argc, char** argv) {
 
     // Try to call nothrow's delete too.  Compilers use this.
     p2 = static_cast<char*>(::operator new(100, std::nothrow));
+    force_use(p2);
     CHECK(p2 != NULL);
     VerifyNewHookWasCalled();
     ::operator delete(p2, std::nothrow);
@@ -1157,6 +1178,7 @@ static int RunAllTests(int argc, char** argv) {
     // Try strdup(), which the system allocates but we must free.  If
     // all goes well, libc will use our malloc!
     p2 = strdup("test");
+    force_use(p2);
     CHECK(p2 != NULL);
     VerifyNewHookWasCalled();
     free(p2);
@@ -1174,6 +1196,7 @@ static int RunAllTests(int argc, char** argv) {
     int size = 8192*2;
     p1 = mmap(NULL, size, PROT_WRITE|PROT_READ, MAP_ANONYMOUS|MAP_PRIVATE,
               -1, 0);
+    force_use(p1);
     CHECK(p1 != NULL);
     VerifyMmapHookWasCalled();
     p1 = mremap(p1, size, size/2, 0);
@@ -1186,6 +1209,7 @@ static int RunAllTests(int argc, char** argv) {
     int fd = open("/dev/zero", O_RDONLY);
     CHECK_GE(fd, 0);   // make sure the open succeeded
     p1 = mmap(NULL, 8192, PROT_READ, MAP_SHARED, fd, 0);
+    force_use(p1);
     CHECK(p1 != NULL);
     VerifyMmapHookWasCalled();
     munmap(p1, 8192);
@@ -1205,13 +1229,16 @@ static int RunAllTests(int argc, char** argv) {
 #if defined(HAVE_SBRK) && defined(__linux) && \
        (defined(__i386__) || defined(__x86_64__))
     p1 = sbrk(8192);
+    force_use(p1);
     CHECK(p1 != NULL);
     VerifySbrkHookWasCalled();
     p1 = sbrk(-8192);
+    force_use(p1);
     CHECK(p1 != NULL);
     VerifySbrkHookWasCalled();
     // However, sbrk hook should *not* be called with sbrk(0)
     p1 = sbrk(0);
+    force_use(p1);
     CHECK(p1 != NULL);
     CHECK_EQ(g_SbrkHook_calls, 0);
 #else   // this is just to quiet the compiler: make sure all fns are called
