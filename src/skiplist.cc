@@ -36,6 +36,7 @@
 #include "span.h"
 #include "static_vars.h"
 #include <sys/resource.h>
+#include <stdio.h>
 
 namespace tcmalloc {
 

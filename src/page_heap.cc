@@ -35,6 +35,7 @@
 #ifdef HAVE_INTTYPES_H
 #include <inttypes.h>                   // for PRIuPTR
 #endif
+#include <stdio.h>
 #include <gperftools/malloc_extension.h>      // for MallocRange, etc
 #include "base/basictypes.h"
 #include "base/commandlineflags.h"
@@ -64,11 +65,11 @@ namespace tcmalloc {
 PageHeap::PageHeap()
     : pagemap_(MetaDataAlloc),
       pagemap_cache_(0),
-      scavenge_counter_(0),
       large_lists_size_(0),
+      using_large_skiplist_(false),
+      scavenge_counter_(0),
       // Start scavenging at kMaxPages list
-      release_index_(kMaxPages),
-      using_large_skiplist_(false) {
+      release_index_(kMaxPages) {
   COMPILE_ASSERT(kNumClasses <= (1 << PageMapCache::kValuebits), valuebits);
   DLL_Init(&large_.normal);
   DLL_Init(&large_.returned);
