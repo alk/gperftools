@@ -198,7 +198,7 @@ Span* PageHeap::AllocLarge(Length n) {
     best = large_skiplist_.GetBestFit(n);
   }
 
-  if (best->location == Span::ON_NORMAL_FREELIST) {
+  if (best == NULL || best->location == Span::ON_NORMAL_FREELIST) {
     return best == NULL ? NULL : Carve(best, n);
   }
 
