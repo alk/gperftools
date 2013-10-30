@@ -613,8 +613,6 @@ bool PageHeap::CheckList(Span* list, Length min_pages, Length max_pages,
 }
 
 void PageHeap::InitializeLargeSkiplist() {
-  fprintf(stderr, "tcmalloc: skiplist threshold reached\n");
-
   using_large_skiplist_ = true;
   large_skiplist_.Init();
 

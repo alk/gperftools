@@ -149,20 +149,4 @@ bool Skiplist::Includes(Span* span) {
 
   return false;
 }
-
-void Skiplist::Print() {
-  fprintf(stderr, "printing skip list of level: %d\n", level_);
-  for(int i = level_; i >= 0; i--) {
-    fprintf(stderr, "level %d: [", i);
-    SkiplistNode* x = head_;
-    while(x->forward[i] != NULL) {
-      fprintf(stderr, "[%lu,%u,%p]", x->forward[i]->value->length,
-                                  (unsigned int)x->forward[i]->value->start,
-				  x->forward[i]->value);
-      x = x->forward[i];
-    }
-    fprintf(stderr, "]\n");
-  }
-}
-
 }

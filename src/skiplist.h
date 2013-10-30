@@ -58,8 +58,6 @@ class Skiplist {
    Span* GetBestFit(size_t pages);
    bool Includes(Span* span);
 
-   void Print();
-
   private:
    unsigned int level_ : 4;
    SkiplistNode* head_;
