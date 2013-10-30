@@ -30,52 +30,40 @@
 // ---
 // Author: James Golick <jamesgolick@gmail.com>
 
-#ifndef TCMALLOC_SKIP_LIST_H_
-#define TCMALLOC_SKIP_LIST_H_
-
 #include <config.h>
 #include "common.h"
+#include "llrb.h"
 #include "span.h"
-#include <unistd.h>
+#include "static_vars.h"
+#include <sys/resource.h>
 
 namespace tcmalloc {
 
-// This can't be greater than 2 ^ 4 without changing the type of
-// Skiplist::level_
-static const unsigned int kSkiplistHeight = 10;
+LLRBNode* LLRB::NewNode(Span* value) {
+  LLRBNode* result = Static::llrb_node_allocator()->New();
+  memset(result, 0, sizeof(*result));
+  result->value = value;
+  result->color = RED; // new nodes are always red
+  return result;
+}
 
-struct SkiplistNode {
-  SkiplistNode* forward[kSkiplistHeight];
-  SkiplistNode* backward[kSkiplistHeight];
-  Span* value;
-};
+void LLRB::DeleteNode(LLRBNode* node) {
+  Static::llrb_node_allocator()->Delete(node);
+}
 
-class Skiplist {
-  public:
-   void Init();
-   void Insert(Span* span);
-   void Remove(Span* span);
-   Span* GetBestFit(size_t pages);
-   bool Includes(Span* span);
+void LLRB::Init() {
+  root_ = NewNode(NULL);
+}
 
-  private:
-   unsigned int level_ : 4;
-   SkiplistNode* head_;
+void LLRB::Insert(Span* span) {
+}
 
-   SkiplistNode* NewNode(Span* value);
-   void DeleteNode(SkiplistNode* node);
+void LLRB::Remove(Span* span) {
+}
 
-   // Straight jacked from src/base/low_level_alloc.cc
-   inline unsigned int random_level() {
-     static int32_t r = 1;
-     int result = 1;
-     while ((((r = r*1103515245 + 12345) >> 30) & 1) == 0) {
-       result++;
-     }
-     return result;
-   }
-};
+Span* LLRB::GetBestFit(size_t pages) {
+}
 
-}  // namespace tcmalloc
-
-#endif  // TCMALLOC_SKIP_LIST_H_
+bool LLRB::Includes(Span* span) {
+}
+}

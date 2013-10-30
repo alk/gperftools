@@ -68,7 +68,7 @@ PageHeap::PageHeap()
       large_lists_size_(0),
       // Start scavenging at kMaxPages list
       release_index_(kMaxPages),
-      using_large_skiplist_(false) {
+      using_large_llrb_(false) {
   COMPILE_ASSERT(kNumClasses <= (1 << PageMapCache::kValuebits), valuebits);
   DLL_Init(&large_.normal);
   DLL_Init(&large_.returned);
@@ -166,7 +166,7 @@ Span* PageHeap::AllocLarge(Length n) {
   // The following loops implements address-ordered best-fit.
   Span *best = NULL;
 
-  if (!using_large_skiplist_) {
+  if (!using_large_llrb_) {
     // Search through normal list
     for (Span* span = large_.normal.next;
 	 span != &large_.normal;
@@ -195,7 +195,7 @@ Span* PageHeap::AllocLarge(Length n) {
       }
     }
   } else {
-    best = large_skiplist_.GetBestFit(n);
+    best = large_llrb_.GetBestFit(n);
   }
 
   if (best == NULL || best->location == Span::ON_NORMAL_FREELIST) {
@@ -326,12 +326,12 @@ void PageHeap::PrependToFreeList(Span* span) {
   } else {
     list = &large_;
     large_lists_size_++;
-    if (large_lists_size_ == kLargeSkiplistThreshold && !using_large_skiplist_) {
-      InitializeLargeSkiplist();
+    if (large_lists_size_ == kLargeLLRBThreshold && !using_large_llrb_) {
+      InitializeLargeLLRB();
     }
 
-    if (using_large_skiplist_) {
-      large_skiplist_.Insert(span);
+    if (using_large_llrb_) {
+      large_llrb_.Insert(span);
     }
   }
   
@@ -353,8 +353,8 @@ void PageHeap::RemoveFromFreeList(Span* span) {
   }
 
   if (span->length >= kMaxPages) {
-    if (using_large_skiplist_) {
-      large_skiplist_.Remove(span);
+    if (using_large_llrb_) {
+      large_llrb_.Remove(span);
     }
 
     large_lists_size_--;
@@ -612,20 +612,20 @@ bool PageHeap::CheckList(Span* list, Length min_pages, Length max_pages,
   return true;
 }
 
-void PageHeap::InitializeLargeSkiplist() {
-  using_large_skiplist_ = true;
-  large_skiplist_.Init();
+void PageHeap::InitializeLargeLLRB() {
+  using_large_llrb_ = true;
+  large_llrb_.Init();
 
   for (Span* span = large_.normal.next;
       span != &large_.normal;
       span = span->next) {
-    large_skiplist_.Insert(span);
+    large_llrb_.Insert(span);
   }
 
   for (Span* span = large_.returned.next;
       span != &large_.returned;
       span = span->next) {
-    large_skiplist_.Insert(span);
+    large_llrb_.Insert(span);
   }
 }
 

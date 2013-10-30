@@ -82,7 +82,7 @@ SpinLock Static::pageheap_lock_(SpinLock::LINKER_INITIALIZED);
 SizeMap Static::sizemap_;
 CentralFreeListPadded Static::central_cache_[kNumClasses];
 PageHeapAllocator<Span> Static::span_allocator_;
-PageHeapAllocator<SkiplistNode> Static::skiplist_node_allocator_;
+PageHeapAllocator<LLRBNode> Static::llrb_node_allocator_;
 PageHeapAllocator<StackTrace> Static::stacktrace_allocator_;
 Span Static::sampled_objects_;
 PageHeapAllocator<StackTraceTable::Bucket> Static::bucket_allocator_;
@@ -95,7 +95,7 @@ void Static::InitStaticVars() {
   span_allocator_.Init();
   span_allocator_.New(); // Reduce cache conflicts
   span_allocator_.New(); // Reduce cache conflicts
-  skiplist_node_allocator_.Init();
+  llrb_node_allocator_.Init();
   stacktrace_allocator_.Init();
   bucket_allocator_.Init();
   // Do a bit of sanitizing: make sure central_cache is aligned properly

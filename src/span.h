@@ -54,7 +54,6 @@ struct Span {
   unsigned int  sizeclass : 8;     // Size-class for small objects (or 0)
   unsigned int  location : 2;      // Is the span on a freelist, and if so, which?
   unsigned int  sample : 1;        // Sampled object?
-  SkiplistNode* skiplist_node_ptr; // Make Skiplist removal constant-time
 
 #undef SPAN_HISTORY
 #ifdef SPAN_HISTORY
@@ -78,7 +77,7 @@ void Event(Span* span, char op, int v = 0);
 Span* NewSpan(PageID p, Length len);
 void DeleteSpan(Span* span);
 
-// Span compare for skip list
+// Span compare for llrb
 inline int SpanCompare(Span* a, Span* b) {
   if (a == NULL ||
       (a->length < b->length || (a->length == b->length && a->start < b->start))) {
