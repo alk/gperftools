@@ -90,8 +90,8 @@ Span* LLRB::GetBestFit(size_t pages) {
 	  break;
 	}
       } else {
-	if (node->llrb_link.rbn_right != &tree_.rbt_nil) {
-	  node = node->llrb_link.rbn_right;
+	if (node->llrb_link.rbn_right_red != &tree_.rbt_nil) {
+	  node = node->llrb_link.rbn_right_red;
 	} else {
 	  break;
 	}
