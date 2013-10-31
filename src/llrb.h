@@ -37,14 +37,39 @@
 #include "common.h"
 #include "span.h"
 #include <unistd.h>
+#include <assert.h>
+#include "rb.h"
+#include <stdio.h>
 
 namespace tcmalloc {
 
+typedef struct LLRBNode llrb_node_t;
 struct LLRBNode {
+  rb_node(llrb_node_t) llrb_link;
   Span* value;
-  LLRBNode* left, *right;
-  bool color;
 };
+
+// Span compare for llrb
+inline int llrb_cmp(llrb_node_t* x, llrb_node_t* y) {
+  Span *a;
+  Span *b;
+
+  a = x->value;
+  b = y->value;
+
+  if (a == NULL ||
+      (a->length < b->length || (a->length == b->length && a->start < b->start))) {
+    return -1;
+  } else if (a->length > b->length || (a->length == b->length && a->start > b->start)) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+typedef rb_tree(llrb_node_t) llrb_t;
+
+rb_gen(static, llrb_, llrb_t, llrb_node_t, llrb_link, llrb_cmp);
 
 class LLRB {
   public:
@@ -55,13 +80,11 @@ class LLRB {
    bool Includes(Span* span);
 
   private:
-   static const bool RED = true;
-   static const bool BLACK = false;
-
-   LLRBNode* root_;
+   llrb_t tree_;
 
    LLRBNode* NewNode(Span* value);
    void DeleteNode(LLRBNode* node);
+   void Remove(LLRBNode* node);
 };
 
 }  // namespace tcmalloc

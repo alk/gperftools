@@ -37,13 +37,14 @@
 #include "static_vars.h"
 #include <sys/resource.h>
 
+#include <stdio.h>
+
 namespace tcmalloc {
 
 LLRBNode* LLRB::NewNode(Span* value) {
   LLRBNode* result = Static::llrb_node_allocator()->New();
   memset(result, 0, sizeof(*result));
   result->value = value;
-  result->color = RED; // new nodes are always red
   return result;
 }
 
@@ -52,18 +53,62 @@ void LLRB::DeleteNode(LLRBNode* node) {
 }
 
 void LLRB::Init() {
-  root_ = NewNode(NULL);
+  llrb_new(&tree_);
 }
 
 void LLRB::Insert(Span* span) {
+  LLRBNode *node = NewNode(span);
+  llrb_insert(&tree_, node);
 }
 
 void LLRB::Remove(Span* span) {
+  LLRBNode search;
+  LLRBNode* found;
+
+  search.value = span;
+  found = llrb_search(&tree_, &search);
+
+  if (found)
+    Remove(found);
+}
+
+void LLRB::Remove(LLRBNode* node) {
+  llrb_remove(&tree_, node);
+  DeleteNode(node);
 }
 
 Span* LLRB::GetBestFit(size_t pages) {
+  LLRBNode *node = tree_.rbt_root;
+
+  if (node != &tree_.rbt_nil) {				
+    while(true) {
+      if (node->value->length >= pages) {
+	if (node->llrb_link.rbn_left != &tree_.rbt_nil &&
+	    node->llrb_link.rbn_left->value->length >= pages) {
+	  node = node->llrb_link.rbn_left;
+	} else {
+	  break;
+	}
+      } else {
+	if (node->llrb_link.rbn_right != &tree_.rbt_nil) {
+	  node = node->llrb_link.rbn_right;
+	} else {
+	  break;
+	}
+      }
+    }
+
+    if (node->value->length >= pages) {
+      Span* ret = node->value;
+      Remove(node);
+      return ret;
+    }
+  }
+
+  return NULL;
 }
 
 bool LLRB::Includes(Span* span) {
+  return false;
 }
 }

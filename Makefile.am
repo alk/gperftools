@@ -427,6 +427,7 @@ S_TCMALLOC_MINIMAL_INCLUDES = src/common.h \
                               src/llrb.h \
                               src/page_heap.h \
                               src/page_heap_allocator.h \
+                              src/rb.h \
                               src/span.h \
                               src/static_vars.h \
                               src/symbolize.h \
