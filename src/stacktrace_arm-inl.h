@@ -116,6 +116,8 @@ int GET_STACK_TRACE_OR_FRAMES {
   // stored in the stack frame.  This works at least for gcc.
   StacktraceArmDummyFunction();
 
+  skip_count++; // skip parent frame due to indirection in stacktrace.cc
+
   int n = 0;
   while (sp && n < max_depth) {
     // The GetStackFrames routine is called when we are in some

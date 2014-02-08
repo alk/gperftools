@@ -104,11 +104,11 @@ int GET_STACK_TRACE_OR_FRAMES {
     skip_count = 0;
   } else {
     unw_getcontext(&uc);
-    skip_count++;         // Do not include current frame
+    skip_count += 2;         // Do not include current and parent frame
   }
 #else
   unw_getcontext(&uc);
-  skip_count++;         // Do not include current frame
+  skip_count += 2;         // Do not include current and parent frame
 #endif
 
   int ret = unw_init_local(&cursor, &uc);

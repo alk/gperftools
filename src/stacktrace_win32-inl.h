@@ -77,7 +77,7 @@ PERFTOOLS_DLL_DECL int GetStackTrace(void** result, int max_depth,
     // TODO(csilvers): should we log an error here?
     return 0;     // can't find a stacktrace with no function to call
   }
-  return (int)RtlCaptureStackBackTrace_fn(skip_count + 2, max_depth,
+  return (int)RtlCaptureStackBackTrace_fn(skip_count + 3, max_depth,
                                           result, 0);
 }
 

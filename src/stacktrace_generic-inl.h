@@ -66,7 +66,7 @@ int GET_STACK_TRACE_OR_FRAMES {
   int size;
 
   size = backtrace(stack, kStackLength);
-  skip_count++;  // we want to skip the current frame as well
+  skip_count += 2;  // we want to skip the current and it's parent frame as well
   int result_count = size - skip_count;
   if (result_count < 0)
     result_count = 0;

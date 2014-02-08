@@ -321,6 +321,8 @@ int GET_STACK_TRACE_OR_FRAMES {
 # error Using stacktrace_x86-inl.h on a non x86 architecture!
 #endif
 
+  skip_count++; // skip parent's frame due to indirection in stacktrace.cc
+
   int n = 0;
   while (sp && n < max_depth) {
     if (*(sp+1) == reinterpret_cast<void *>(0)) {
