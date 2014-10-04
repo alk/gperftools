@@ -81,76 +81,170 @@ void CentralFreeList::Init(size_t cl) {
   memset(&stats, 0, sizeof(stats));
 }
 
-void CentralFreeList::ReleaseListToSpans(void* start) {
-  stats.puts_count++;
-  while (start) {
-    void *next = SLL_Next(start);
-    stats.objects_put++;
-    ReleaseToSpans(start);
-    start = next;
+enum { kSpansToDeleteSize = 64 };
+
+inline
+void CentralFreeList::DeletePageSpans(Span **spans, size_t delete_ptr) {
+  Span *span;
+  size_t count = kSpansToDeleteSize - delete_ptr;
+  if (count == 0) {
+    return;
   }
+  num_spans_ -= count;
+
+  lock_.Unlock();
+
+  size_t p = kSpansToDeleteSize;
+
+  SpinLockHolder h(Static::pageheap_lock());
+
+  while (p > delete_ptr) {
+    p--;
+    span = spans[p];
+    Static::pageheap()->Delete(span);
+  }
+
+  lock_.Lock();
 }
+
 
 // MapObjectToSpan should logically be part of ReleaseToSpans.  But
 // this triggers an optimization bug in gcc 4.5.0.  Moving to a
 // separate function, and making sure that function isn't inlined,
 // seems to fix the problem.  It also should be fixed for gcc 4.5.1.
-static
-#if __GNUC__ == 4 && __GNUC_MINOR__ == 5 && __GNUC_PATCHLEVEL__ == 0
-__attribute__ ((noinline))
-#endif
-Span* MapObjectToSpan(void* object) {
-  const PageID p = reinterpret_cast<uintptr_t>(object) >> kPageShift;
-  Span* span = Static::pageheap()->GetDescriptor(p);
-  return span;
+// static
+// #if __GNUC__ == 4 && __GNUC_MINOR__ == 5 && __GNUC_PATCHLEVEL__ == 0
+// __attribute__ ((noinline))
+// #endif
+// Span* MapObjectToSpan(void* object) {
+//   const PageID p = reinterpret_cast<uintptr_t>(object) >> kPageShift;
+//   Span* span = Static::pageheap()->GetDescriptor(p);
+//   return span;
+// }
+
+void CentralFreeList::ReleaseListToSpans(void* start) {
+  stats.puts_count++;
+
+  if (start == NULL) {
+    return;
+  }
+
+  Span *spans_to_delete[kSpansToDeleteSize];
+  size_t spans_to_delete_ptr = kSpansToDeleteSize;
+
+  PageID prev_page_id = reinterpret_cast<uintptr_t>(start) >> kPageShift;
+  Span *span = Static::pageheap()->GetDescriptor(prev_page_id);
+
+  while (true) {
+    void *next = SLL_Next(start);
+    void *object = start;
+
+    stats.objects_put++;
+
+    // Span* span = MapObjectToSpan(object);
+
+
+    // If span is empty, move it to non-empty list
+    if (span->objects == NULL) {
+      tcmalloc::DLL_Remove(span);
+      tcmalloc::DLL_Prepend(&nonempty_, span);
+      Event(span, 'N', 0);
+    }
+
+    // The following check is expensive, so it is disabled by default
+    // if (false) {
+    //   // Check that object does not occur in list
+    //   int got = 0;
+    //   for (void* p = span->objects; p != NULL; p = *((void**) p)) {
+    //     ASSERT(p != object);
+    //     got++;
+    //   }
+    //   ASSERT(got + span->refcount ==
+    //          (span->length<<kPageShift) /
+    //          Static::sizemap()->ByteSizeForClass(span->sizeclass));
+    // }
+
+    counter_++;
+    span->refcount--;
+    if (span->refcount == 0) {
+      Event(span, '#', 0);
+      counter_ -= ((span->length<<kPageShift) /
+                   Static::sizemap()->ByteSizeForClass(span->sizeclass));
+      tcmalloc::DLL_Remove(span);
+      if (spans_to_delete_ptr == 0) {
+        DeletePageSpans(spans_to_delete, spans_to_delete_ptr);
+        spans_to_delete_ptr = kSpansToDeleteSize;
+      }
+      spans_to_delete[--spans_to_delete_ptr] = span;
+    } else {
+      *(reinterpret_cast<void**>(object)) = span->objects;
+      span->objects = object;
+    }
+
+    start = next;
+
+    if (start == NULL) {
+      break;
+    }
+
+    const PageID page_id = reinterpret_cast<uintptr_t>(start) >> kPageShift;
+    if (page_id != prev_page_id) {
+      span = Static::pageheap()->GetDescriptor(page_id);
+      ASSERT(span != NULL);
+      ASSERT(span->refcount > 0);
+    }
+    prev_page_id = page_id;
+  }
+
+  DeletePageSpans(spans_to_delete, spans_to_delete_ptr);
 }
 
-void CentralFreeList::ReleaseToSpans(void* object) {
-  Span* span = MapObjectToSpan(object);
-  ASSERT(span != NULL);
-  ASSERT(span->refcount > 0);
+// void CentralFreeList::ReleaseToSpans(void* object) {
+//   Span* span = MapObjectToSpan(object);
+//   ASSERT(span != NULL);
+//   ASSERT(span->refcount > 0);
 
-  // If span is empty, move it to non-empty list
-  if (span->objects == NULL) {
-    tcmalloc::DLL_Remove(span);
-    tcmalloc::DLL_Prepend(&nonempty_, span);
-    Event(span, 'N', 0);
-  }
+//   // If span is empty, move it to non-empty list
+//   if (span->objects == NULL) {
+//     tcmalloc::DLL_Remove(span);
+//     tcmalloc::DLL_Prepend(&nonempty_, span);
+//     Event(span, 'N', 0);
+//   }
 
-  // The following check is expensive, so it is disabled by default
-  if (false) {
-    // Check that object does not occur in list
-    int got = 0;
-    for (void* p = span->objects; p != NULL; p = *((void**) p)) {
-      ASSERT(p != object);
-      got++;
-    }
-    ASSERT(got + span->refcount ==
-           (span->length<<kPageShift) /
-           Static::sizemap()->ByteSizeForClass(span->sizeclass));
-  }
+//   // The following check is expensive, so it is disabled by default
+//   if (false) {
+//     // Check that object does not occur in list
+//     int got = 0;
+//     for (void* p = span->objects; p != NULL; p = *((void**) p)) {
+//       ASSERT(p != object);
+//       got++;
+//     }
+//     ASSERT(got + span->refcount ==
+//            (span->length<<kPageShift) /
+//            Static::sizemap()->ByteSizeForClass(span->sizeclass));
+//   }
 
-  counter_++;
-  span->refcount--;
-  if (span->refcount == 0) {
-    Event(span, '#', 0);
-    counter_ -= ((span->length<<kPageShift) /
-                 Static::sizemap()->ByteSizeForClass(span->sizeclass));
-    tcmalloc::DLL_Remove(span);
-    --num_spans_;
+//   counter_++;
+//   span->refcount--;
+//   if (span->refcount == 0) {
+//     Event(span, '#', 0);
+//     counter_ -= ((span->length<<kPageShift) /
+//                  Static::sizemap()->ByteSizeForClass(span->sizeclass));
+//     tcmalloc::DLL_Remove(span);
+//     --num_spans_;
 
-    // Release central list lock while operating on pageheap
-    lock_.Unlock();
-    {
-      SpinLockHolder h(Static::pageheap_lock());
-      Static::pageheap()->Delete(span);
-    }
-    lock_.Lock();
-  } else {
-    *(reinterpret_cast<void**>(object)) = span->objects;
-    span->objects = object;
-  }
-}
+//     // Release central list lock while operating on pageheap
+//     lock_.Unlock();
+//     {
+//       SpinLockHolder h(Static::pageheap_lock());
+//       Static::pageheap()->Delete(span);
+//     }
+//     lock_.Lock();
+//   } else {
+//     *(reinterpret_cast<void**>(object)) = span->objects;
+//     span->objects = object;
+//   }
+// }
 
 bool CentralFreeList::EvictRandomSizeClass(
     int locked_size_class, bool force) {

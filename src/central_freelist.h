@@ -141,6 +141,8 @@ class CentralFreeList {
   // NULL on allocation failure.
   int FetchFromOneSpansSafe(int N, void **start, void **end) EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
+  void DeletePageSpans(Span **spans, size_t stack_ptr);
+
   // REQUIRES: lock_ is held
   // Release a linked list of objects to spans.
   // May temporarily release lock_.
@@ -149,7 +151,7 @@ class CentralFreeList {
   // REQUIRES: lock_ is held
   // Release an object to spans.
   // May temporarily release lock_.
-  void ReleaseToSpans(void* object) EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  // void ReleaseToSpans(void* object) EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   // REQUIRES: lock_ is held
   // Populate cache by fetching from the page heap.
