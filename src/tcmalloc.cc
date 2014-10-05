@@ -429,6 +429,23 @@ static void DumpStats(TCMalloc_Printer* out, int level) {
       }
     }
 
+
+    out->printf("------------------------------------------------\n");
+    out->printf("Central cache free lists stats,\n");
+    out->printf("------------------------------------------------\n");
+    for (int cl = 0; cl < kNumClasses; ++cl) {
+      tcmalloc::FreeListStats stats = Static::central_cache()[cl].GetStats();
+      if (!stats.IsEmpty()) {
+        out->printf("class %3d [ %8" PRIuS " bytes ] : "
+                    "tc (%" PRIu64 "/%" PRIu64"), non-tc (%" PRIu64 "/%" PRIu64 "), "
+                    "non-tc-objects (%" PRIu64 "/%" PRIu64 ")\n",
+                    cl, Static::sizemap()->ByteSizeForClass(cl),
+                    stats.tc_gets, stats.tc_puts,
+                    stats.gets_count, stats.puts_count,
+                    stats.objects_get, stats.objects_put);
+      }
+    }
+
     // append page heap info
     int nonempty_sizes = 0;
     for (int s = 0; s < kMaxPages; s++) {

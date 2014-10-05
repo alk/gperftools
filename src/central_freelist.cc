@@ -77,11 +77,15 @@ void CentralFreeList::Init(size_t cl) {
   }
   used_slots_ = 0;
   ASSERT(cache_size_ <= max_cache_size_);
+
+  memset(&stats, 0, sizeof(stats));
 }
 
 void CentralFreeList::ReleaseListToSpans(void* start) {
+  stats.puts_count++;
   while (start) {
     void *next = SLL_Next(start);
+    stats.objects_put++;
     ReleaseToSpans(start);
     start = next;
   }
@@ -238,6 +242,7 @@ void CentralFreeList::InsertRange(void *start, void *end, int N) {
     TCEntry *entry = &tc_slots_[slot];
     entry->head = start;
     entry->tail = end;
+    stats.tc_puts++;
     return;
   }
   ReleaseListToSpans(start);
@@ -253,6 +258,7 @@ int CentralFreeList::RemoveRange(void **start, void **end, int N) {
     TCEntry *entry = &tc_slots_[slot];
     *start = entry->head;
     *end = entry->tail;
+    stats.tc_gets++;
     lock_.Unlock();
     return N;
   }
@@ -273,6 +279,8 @@ int CentralFreeList::RemoveRange(void **start, void **end, int N) {
       SLL_PushRange(start, head, tail);
     }
   }
+  stats.gets_count++;
+  stats.objects_get += result;
   lock_.Unlock();
   return result;
 }
@@ -384,4 +392,11 @@ size_t CentralFreeList::OverheadBytes() {
   return num_spans_ * overhead_per_span;
 }
 
+FreeListStats CentralFreeList::GetStats()
+{
+  SpinLockHolder h(&lock_);
+  return stats;
+}
+
 }  // namespace tcmalloc
+

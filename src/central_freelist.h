@@ -46,6 +46,21 @@
 
 namespace tcmalloc {
 
+struct FreeListStats {
+  uint64_t tc_puts;
+  uint64_t tc_gets;
+  uint64_t objects_put;
+  uint64_t objects_get;
+  uint64_t puts_count;
+  uint64_t gets_count;
+
+  bool IsEmpty() {
+    return (tc_puts == 0) || (tc_gets == 0)
+      || (objects_put == 0) || (objects_get == 0)
+      || (puts_count == 0) || (gets_count == 0);
+  }
+};
+
 // Data kept per size-class in central cache.
 class CentralFreeList {
  public:
@@ -70,6 +85,8 @@ class CentralFreeList {
     SpinLockHolder h(&lock_);
     return counter_;
   }
+
+  FreeListStats GetStats();
 
   // Returns the number of free objects in the transfer cache.
   int tc_length();
@@ -186,6 +203,8 @@ class CentralFreeList {
   int32_t cache_size_;
   // Maximum size of the cache for a given size class.
   int32_t max_cache_size_;
+
+  FreeListStats stats;
 };
 
 // Pads each CentralCache object to multiple of 64 bytes.  Since some
