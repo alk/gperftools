@@ -327,6 +327,8 @@ int CentralFreeList::FetchFromOneSpans(int N, void **start, void **end) {
 
 // Fetch memory from the system and add to the central cache freelist.
 void CentralFreeList::Populate() {
+  stats.populate_count++;
+
   // Release central list lock while operating on pageheap
   lock_.Unlock();
   const size_t npages = Static::sizemap()->class_to_pages(size_class_);
