@@ -208,6 +208,7 @@ class CentralFreeList {
   // Maximum size of the cache for a given size class.
   int32_t max_cache_size_;
 
+  // TODO: rename to stats_ to match code style
   FreeListStats stats;
 };
 
