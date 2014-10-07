@@ -54,12 +54,13 @@ struct FreeListStats {
   uint64_t puts_count;
   uint64_t gets_count;
   uint64_t populate_count;
+  uint64_t depopulate_count;
 
   bool IsEmpty() {
     return (tc_puts == 0) && (tc_gets == 0)
       && (objects_put == 0) && (objects_get == 0)
       && (puts_count == 0) && (gets_count == 0)
-      && (populate_count == 0);
+      && (populate_count == 0) && (depopulate_count == 0);
   }
 };
 

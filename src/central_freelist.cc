@@ -91,6 +91,7 @@ void CentralFreeList::DeletePageSpans(Span **spans, size_t delete_ptr) {
     return;
   }
   num_spans_ -= count;
+  stats.depopulate_count += count;
 
   lock_.Unlock();
 

@@ -438,12 +438,13 @@ static void DumpStats(TCMalloc_Printer* out, int level) {
       if (!stats.IsEmpty()) {
         out->printf("class %3d [ %8" PRIuS " bytes ] : "
                     "tc (%" PRIu64 "/%" PRIu64"), non-tc (%" PRIu64 "/%" PRIu64 "), "
-                    "non-tc-objects (%" PRIu64 "/%" PRIu64 "), populates %" PRIu64 "\n",
+                    "non-tc-objects (%" PRIu64 "/%" PRIu64 "), "
+                    "populates %" PRIu64 ", de-populates %" PRIu64 "\n",
                     cl, Static::sizemap()->ByteSizeForClass(cl),
                     stats.tc_gets, stats.tc_puts,
                     stats.gets_count, stats.puts_count,
                     stats.objects_get, stats.objects_put,
-                    stats.populate_count);
+                    stats.populate_count, stats.depopulate_count);
       }
     }
 
