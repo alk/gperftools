@@ -513,7 +513,7 @@ endif()
 
 # These are good warnings to turn on by default.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wwrite-strings -Woverloaded-virtual -Wno-sign-compare")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wwrite-strings -Woverloaded-virtual -Wno-sign-compare -Wno-frame-address")
 
   # On i386, -mmmx is needed for the mmx-based instructions in
   # atomicops-internal-x86.h. Also as of gcc 4.6, -fomit-frame-pointer

@@ -21,7 +21,7 @@ AM_CXXFLAGS =
 # These are good warnings to turn on by default.
 if GCC
 AM_CXXFLAGS += -Wall -Wwrite-strings -Woverloaded-virtual \
-               -Wno-sign-compare
+               -Wno-sign-compare -Wno-frame-address
 
 # On i386, -mmmx is needed for the mmx-based instructions in
 # atomicops-internal-x86.h. Also as of gcc 4.6, -fomit-frame-pointer
@@ -331,6 +331,7 @@ if WITH_STACK_TRACE
 S_STACKTRACE_INCLUDES = src/stacktrace_impl_setup-inl.h \
                         src/stacktrace_generic-inl.h \
                         src/stacktrace_libgcc-inl.h \
+                        src/stacktrace_gcc-inl.h \
 			src/stacktrace_libunwind-inl.h \
 			src/stacktrace_arm-inl.h \
 			src/stacktrace_powerpc-inl.h \

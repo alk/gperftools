@@ -120,6 +120,15 @@ struct GetStackImplementation {
 #define HAVE_GST_x86
 #endif // i386 || x86_64
 
+#if defined(__GNUC__)
+#define STACKTRACE_INL_HEADER "stacktrace_gcc-inl.h"
+#define GST_SUFFIX gcc_fp
+#include "stacktrace_impl_setup-inl.h"
+#undef GST_SUFFIX
+#undef STACKTRACE_INL_HEADER
+#define HAVE_GST_gcc_fp
+#endif
+
 #if defined(__ppc__) || defined(__PPC__)
 #if defined(__linux__)
 #define STACKTRACE_INL_HEADER "stacktrace_powerpc-linux-inl.h"
@@ -168,6 +177,9 @@ static GetStackImplementation *all_impls[] = {
 #endif
 #ifdef HAVE_GST_generic
   &impl__generic,
+#endif
+#ifdef HAVE_GST_gcc_fp
+  &impl__gcc_fp,
 #endif
 #ifdef HAVE_GST_libunwind
   &impl__libunwind,
