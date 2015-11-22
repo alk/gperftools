@@ -90,7 +90,10 @@ class ThreadCache {
   // Allocate an object of the given size and class. The size given
   // must be the same as the size of the class in the size map.
   void* Allocate(size_t size, size_t cl);
+  bool AllocateFastPath(size_t size, size_t cl, size_t list_off, void **result);
   void Deallocate(void* ptr, size_t size_class);
+  void DeallocateFastPath(void* ptr, size_t size_class,
+                          size_t size, size_t list_off);
 
   void Scavenge();
 
@@ -206,6 +209,19 @@ class ThreadCache {
       length_--;
       if (length_ < lowater_) lowater_ = length_;
       return SLL_Pop(&list_);
+    }
+
+    bool MaybePop(void **place) {
+      ASSERT(list_ != NULL);
+      void *result = list_;
+      if (result == NULL) {
+        return false;
+      }
+      list_ = SLL_Next(result);
+      *place = result;
+      length_--;
+      if (length_ < lowater_) lowater_ = length_;
+      return true;
     }
 
     void* Next() {
@@ -364,9 +380,49 @@ inline void* ThreadCache::Allocate(size_t size, size_t cl) {
   return list->Pop();
 }
 
+inline bool ThreadCache::AllocateFastPath(size_t size, size_t cl,
+                                          size_t list_off, void **result)
+{
+  char *ptr = reinterpret_cast<char *>(list_) + list_off;
+  FreeList *list = reinterpret_cast<ThreadCache::FreeList *>(ptr);
+  if (!list->MaybePop(result)) {
+    return false;
+  }
+  size_ -= size;
+  return true;
+}
+
 inline void ThreadCache::Deallocate(void* ptr, size_t cl) {
   FreeList* list = &list_[cl];
   size_ += Static::sizemap()->ByteSizeForClass(cl);
+  ssize_t size_headroom = max_size_ - size_ - 1;
+
+  // This catches back-to-back frees of allocs in the same size
+  // class. A more comprehensive (and expensive) test would be to walk
+  // the entire freelist. But this might be enough to find some bugs.
+  ASSERT(ptr != list->Next());
+
+  list->Push(ptr);
+  ssize_t list_headroom =
+      static_cast<ssize_t>(list->max_length()) - list->length();
+
+  // There are two relatively uncommon things that require further work.
+  // In the common case we're done, and in that case we need a single branch
+  // because of the bitwise-or trick that follows.
+  if (UNLIKELY((list_headroom | size_headroom) < 0)) {
+    if (list_headroom < 0) {
+      ListTooLong(list, cl);
+    }
+    if (size_ >= max_size_) Scavenge();
+  }
+}
+
+inline void ThreadCache::DeallocateFastPath(void* ptr, size_t cl,
+                                            size_t size, size_t list_off) {
+  char *listptr = reinterpret_cast<char *>(list_) + list_off;
+  FreeList *list = reinterpret_cast<ThreadCache::FreeList *>(listptr);
+
+  size_ += size;
   ssize_t size_headroom = max_size_ - size_ - 1;
 
   // This catches back-to-back frees of allocs in the same size

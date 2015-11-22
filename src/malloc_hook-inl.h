@@ -139,6 +139,10 @@ inline void MallocHook::InvokeDeleteHook(const void* p) {
   }
 }
 
+inline bool HaveDeleteHook() {
+  return UNLIKELY(!base::internal::delete_hooks_.empty());
+}
+
 // The following method is DEPRECATED
 inline MallocHook::PreMmapHook MallocHook::GetPreMmapHook() {
   return base::internal::premmap_hooks_.GetSingular();
