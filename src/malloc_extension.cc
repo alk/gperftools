@@ -127,6 +127,15 @@ void MallocExtension::GetStats(char* buffer, int length) {
   buffer[0] = '\0';
 }
 
+size_t MallocExtension::GetNumClasses() {
+	return 0;
+}
+
+void MallocExtension::GetCentralCacheStats(struct CentralCacheStats* cc,
+                                           size_t size) {
+  assert(size == kNumClasses);
+}
+
 bool MallocExtension::MallocMemoryStats(int* blocks, size_t* total,
                                        int histogram[kMallocHistogramSize]) {
   *blocks = 0;
@@ -358,6 +367,10 @@ C_SHIM(MallocMemoryStats, int,
 
 C_SHIM(GetStats, void,
        (char* buffer, int buffer_length), (buffer, buffer_length));
+C_SHIM(GetNumClasses, size_t, (void), ());
+C_SHIM(GetCentralCacheStats, void,
+       (struct MallocExtension::CentralCacheStats* cc, size_t size),
+       (cc, size));
 C_SHIM(GetNumericProperty, int,
        (const char* property, size_t* value), (property, value));
 C_SHIM(SetNumericProperty, int,

@@ -493,6 +493,21 @@ static void PrintStats(int level) {
   delete[] buffer;
 }
 
+static void CopyCentralCacheStats(struct MallocExtension::CentralCacheStats* cc,
+		                  size_t size) {
+  for (unsigned int cl = 0; cl < size; ++cl) {
+    const size_t inuse = Static::central_cache()[cl].get_num_spans();
+    const size_t free = Static::central_cache()[cl].length();
+    const size_t tc_free = Static::central_cache()[cl].tc_length();
+    const size_t size = Static::sizemap()->ByteSizeForClass(cl);
+    const size_t class_page = Static::sizemap()->class_to_pages(cl);
+
+    cc[cl].inuse_memory = (inuse * class_page) << kPageShift;
+    cc[cl].free_memory = free + tc_free;
+    cc[cl].class_size = size;
+  }
+}
+
 static void** DumpHeapGrowthStackTraces() {
   // Count how much space we need
   int needed_slots = 0;
@@ -594,6 +609,16 @@ class TCMallocImplementation : public MallocExtension {
     } else {
       DumpStats(&printer, 2);
     }
+  }
+
+  virtual size_t GetNumClasses() {
+	return kNumClasses;
+  }
+
+  virtual void GetCentralCacheStats(struct CentralCacheStats* cc,
+		                    size_t size) {
+    ASSERT(size == kNumClasses);
+    CopyCentralCacheStats(cc, size);
   }
 
   // We may print an extra, tcmalloc-specific warning message here.
