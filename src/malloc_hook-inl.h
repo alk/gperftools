@@ -83,6 +83,10 @@ struct PERFTOOLS_DLL_DECL HookList {
     return base::subtle::NoBarrier_Load(&priv_end) == 0;
   }
 
+  uintptr_t emptyness() const {
+    return (uintptr_t)base::subtle::NoBarrier_Load(&priv_end);
+  }
+
   // Used purely to handle deprecated singular hooks
   T GetSingular() const {
     const AtomicWord *place = &priv_data[kHookListSingularIdx];

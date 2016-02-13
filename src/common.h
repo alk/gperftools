@@ -234,6 +234,10 @@ class SizeMap {
     return class_array_[ClassIndex(size)];
   }
 
+  inline int SizeClassSmall(size_t size) {
+    return class_array_[SmallSizeClass(size)];
+  }
+
   inline bool MaybeSizeClass(size_t size, size_t *size_class) {
     size_t class_idx;
     if (LIKELY(size <= kMaxSmallSize)) {

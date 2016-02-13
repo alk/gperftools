@@ -1598,6 +1598,32 @@ extern "C" void* tc_malloc_full(size_t size) __THROW {
   return result;
 }
 
+// extern "C" void* tc_malloc_full(size_t size) __THROW {
+//   return tc_malloc(size);
+// }
+
+
+extern "C" PERFTOOLS_DLL_DECL void *tc_malloc_c(size_t size) __THROW {
+  if ((uintptr_t)(size >> 10) | (uintptr_t)(base::internal::new_hooks_.emptyness())) {
+    return tc_malloc_full(size);
+  }
+
+  ThreadCache *heap = ThreadCache::GetCacheWhichMustBePresent();
+  if (!heap) {
+    return tc_malloc_full(size);
+  }
+
+  size_t cl = Static::sizemap()->SizeClassSmall(size);
+  size = Static::sizemap()->class_to_size(cl);
+
+  void *rv;
+  if (!heap->TryAllocate(size, cl, &rv)) {
+    return tc_malloc_full(size);
+  }
+
+  return rv;
+}
+
 extern "C" PERFTOOLS_DLL_DECL void *tc_malloc(size_t size) __THROW {
   void *rv;
   asm volatile(
@@ -1636,6 +1662,11 @@ extern "C" PERFTOOLS_DLL_DECL void *tc_malloc(size_t size) __THROW {
     "2:\n\t"
     "movq (%%rax), %%rdx\n\t"
     "movq %%rdx, 48(%%rsi, %%rcx)\n\t"
+
+    "test %%rdx, %%rdx\n\t"
+    "cmove %%rax, %%rdx\n\t"
+    "prefetchnta (%%rdx)\n\t"
+
     "ret\n\t"
 
     "1:\n\t"
@@ -1648,10 +1679,16 @@ extern "C" PERFTOOLS_DLL_DECL void *tc_malloc(size_t size) __THROW {
   return rv;
 }
 
-extern "C" PERFTOOLS_DLL_DECL void tc_free(void* ptr) __THROW {
-  MallocHook::InvokeDeleteHook(ptr);
-  do_free(ptr);
-}
+// extern "C" PERFTOOLS_DLL_DECL void tc_free(void* ptr) __THROW {
+//   MallocHook::InvokeDeleteHook(ptr);
+//   do_free(ptr);
+// }
+
+extern "C" PERFTOOLS_DLL_DECL void tc_free(void* ptr) __THROW
+  __attribute__((alias("tc_deletearray_nothrow")));
+//   MallocHook::InvokeDeleteHook(ptr);
+//   do_free(ptr);
+// }
 
 extern "C" PERFTOOLS_DLL_DECL void tc_free_sized(void *ptr, size_t size) __THROW {
   if ((reinterpret_cast<uintptr_t>(ptr) & (kPageSize-1)) == 0) {

@@ -92,6 +92,8 @@ class ThreadCache {
   void* Allocate(size_t size, size_t cl);
   void Deallocate(void* ptr, size_t size_class);
 
+  bool TryAllocate(size_t size, size_t cl, void **rv);
+
   void Scavenge();
 
   int GetSamplePeriod();
@@ -209,6 +211,15 @@ class ThreadCache {
       length_--;
       if (length_ < lowater_) lowater_ = length_;
       return SLL_Pop(&list_);
+    }
+
+    bool TryPop(void **rv) {
+      if (SLL_TryPop(&list_, rv)) {
+        length_--;
+        if (length_ < lowater_) lowater_ = length_;
+        return true;
+      }
+      return false;
     }
 
     void* Next() {
@@ -366,6 +377,18 @@ inline void* ThreadCache::Allocate(size_t size, size_t cl) {
   }
   size_ -= size;
   return list->Pop();
+}
+
+inline bool ThreadCache::TryAllocate(size_t size, size_t cl, void **rv) {
+  ASSERT(size <= kMaxSize);
+  ASSERT(size == Static::sizemap()->ByteSizeForClass(cl));
+
+  FreeList* list = &list_[cl];
+  if (!list->TryPop(rv)) {
+    return false;
+  }
+  size_ -= size;
+  return true;
 }
 
 inline void ThreadCache::Deallocate(void* ptr, size_t cl) {

@@ -60,6 +60,16 @@ inline void *SLL_Pop(void **list) {
   return result;
 }
 
+inline bool SLL_TryPop(void **list, void **rv) {
+  void *result = *list;
+  if (!result) {
+    return false;
+  }
+  *list = SLL_Next(*list);
+  *rv = result;
+  return true;
+}
+
 // Remove N elements from a linked list to which head points.  head will be
 // modified to point to the new head.  start and end will point to the first
 // and last nodes of the range.  Note that end will point to NULL after this
