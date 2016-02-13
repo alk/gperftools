@@ -1589,7 +1589,10 @@ extern "C" PERFTOOLS_DLL_DECL int tc_set_new_mode(int flag) __THROW {
 //         heap-checker.cc depends on this to start a stack trace from
 //         the call to the (de)allocation function.
 
-extern "C" PERFTOOLS_DLL_DECL void* tc_malloc_full(size_t size) __THROW {
+extern "C" void *tc_malloc_full(size_t size) __THROW
+  ATTRIBUTE_SECTION(google_malloc);
+
+extern "C" void* tc_malloc_full(size_t size) __THROW {
   void* result = do_malloc_or_cpp_alloc(size);
   MallocHook::InvokeNewHook(result, size);
   return result;
@@ -1605,6 +1608,10 @@ extern "C" PERFTOOLS_DLL_DECL void *tc_malloc(size_t size) __THROW {
 
     "movq _ZN8tcmalloc11ThreadCache17threadlocal_data_E@gottpoff(%%rip), %%rax\n\t"
     "movq %%fs:(%%rax), %%rsi	# threadlocal_data_.heap, D.30021\n\t"
+
+    // TODO: this is placeholder for sampling
+    // "subq %%rdi, %%fs:8(%%rax)\n\n"
+    // "jc tc_malloc_full_sampling\n\t"
 
     "test %%rsi, %%rsi\n\t"
     "je tc_malloc_full\n\t"

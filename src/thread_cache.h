@@ -267,6 +267,7 @@ class ThreadCache {
 #ifdef HAVE_TLS
   struct ThreadLocalData {
     ThreadCache* heap;
+    size_t bytes_to_sample;
     // min_size_for_slow_path is 0 if heap is NULL or kMaxSize + 1 otherwise.
     // The latter is the common case and allows allocation to be faster
     // than it would be otherwise: typically a single branch will
