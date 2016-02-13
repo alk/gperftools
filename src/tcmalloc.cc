@@ -1589,10 +1589,56 @@ extern "C" PERFTOOLS_DLL_DECL int tc_set_new_mode(int flag) __THROW {
 //         heap-checker.cc depends on this to start a stack trace from
 //         the call to the (de)allocation function.
 
-extern "C" PERFTOOLS_DLL_DECL void* tc_malloc(size_t size) __THROW {
+extern "C" PERFTOOLS_DLL_DECL void* tc_malloc_full(size_t size) __THROW {
   void* result = do_malloc_or_cpp_alloc(size);
   MallocHook::InvokeNewHook(result, size);
   return result;
+}
+
+extern "C" PERFTOOLS_DLL_DECL void *tc_malloc(size_t size) __THROW {
+  void *rv;
+  asm volatile(
+    "mov %%rdi, %%rax\n\t"
+    "shr $10, %%rax\n\t"
+    "orq _ZN4base8internal10new_hooks_E(%%rip), %%rax\n\t"
+    "jne tc_malloc_full\n\t"
+
+    "movq _ZN8tcmalloc11ThreadCache17threadlocal_data_E@gottpoff(%%rip), %%rax\n\t"
+    "movq %%fs:(%%rax), %%rsi	# threadlocal_data_.heap, D.30021\n\t"
+
+    "test %%rsi, %%rsi\n\t"
+    "je tc_malloc_full\n\t"
+
+    "leal 7(%%rdi), %%eax	#, D.30022\n\t"
+    "shrl $3, %%eax\n\t"
+
+    "movzbl _ZN8tcmalloc6Static8sizemap_E+352(%%rax), %%ecx	# sizemap_.class_array_, cl\n\t"
+    "movq _ZN8tcmalloc6Static8sizemap_E+2528(,%%rcx,8), %%rdi	# sizemap_.class_to_size_, D.30017\n\t"
+    "shlq $5, %%rcx\n\t"
+
+    "movq 48(%%rsi, %%rcx), %%rax\n\t" // retval
+    "test %%rax, %%rax\n\t"
+    "je tc_malloc_full\n\t"
+
+    "subq %%rdi, 16(%%rsi) # D.30017, _23->size_\n\t"
+    "movl 56(%%rsi, %%rcx), %%edx \n\t"
+    "dec %%edx \n\t"
+    "cmpl 60(%%rsi, %%rcx), %%edx \n\t"
+    "movl %%edx, 56(%%rsi, %%rcx) \n\t"
+    "jb 1f\n\t"
+    "2:\n\t"
+    "movq (%%rax), %%rdx\n\t"
+    "movq %%rdx, 48(%%rsi, %%rcx)\n\t"
+    "ret\n\t"
+
+    "1:\n\t"
+    "movl %%edx, 60(%%rsi, %%rcx)\n\t"
+    "jmp 2b\n\n"
+    "\n"
+    : "=A" (rv)
+  );
+  // not really possible
+  return rv;
 }
 
 extern "C" PERFTOOLS_DLL_DECL void tc_free(void* ptr) __THROW {

@@ -154,6 +154,8 @@ class ThreadCache {
     uint16_t length_overages_;
 #endif
 
+    size_t extra;
+
    public:
     void Init() {
       list_ = NULL;
