@@ -1663,9 +1663,9 @@ extern "C" PERFTOOLS_DLL_DECL void *tc_malloc(size_t size) __THROW {
     "movq (%%rax), %%rdx\n\t"
     "movq %%rdx, 48(%%rsi, %%rcx)\n\t"
 
-    "test %%rdx, %%rdx\n\t"
-    "cmove %%rax, %%rdx\n\t"
-    "prefetchnta (%%rdx)\n\t"
+    // "test %%rdx, %%rdx\n\t"
+    // "cmove %%rax, %%rdx\n\t"
+    // "prefetchnta (%%rdx)\n\t"
 
     "ret\n\t"
 

@@ -29,6 +29,8 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#include <algorithm>
+
 #include "run_benchmark.h"
 
 static void bench_fastpath_throughput(long iterations,
@@ -168,17 +170,38 @@ static void bench_fastpath_rnd_dependent(long iterations,
   }
 }
 
+void randomize_one_size_class(size_t size) {
+  static const int kCount = 16384;
+  void *ptrs[kCount];
+  for (int i = 0; i < kCount; i++) {
+    ptrs[i] = malloc(size);
+  }
+  std::random_shuffle(ptrs, ptrs + kCount);
+  for (int i = 0; i < kCount; i++) {
+    free(ptrs[i]);
+  }
+}
+
+void randomize_size_classes() {
+  randomize_one_size_class(8);
+  for (int i = 16; i <= 1024; i += 16) {
+    randomize_one_size_class(i);
+  }
+}
+
 int main(void)
 {
-  // report_benchmark("bench_fastpath_throughput", bench_fastpath_throughput, 0);
-  // report_benchmark("bench_fastpath_dependent", bench_fastpath_dependent, 0);
-  // report_benchmark("bench_fastpath_simple", bench_fastpath_simple, 0);
-  // for (int i = 8; i <= 512; i <<= 1) {
-  //   report_benchmark("bench_fastpath_stack", bench_fastpath_stack, i);
-  // }
-  // report_benchmark("bench_fastpath_stack_simple", bench_fastpath_stack_simple, 32);
-  // report_benchmark("bench_fastpath_stack_simple", bench_fastpath_stack_simple, 8192);
+  randomize_size_classes();
+
+  report_benchmark("bench_fastpath_throughput", bench_fastpath_throughput, 0);
+  report_benchmark("bench_fastpath_dependent", bench_fastpath_dependent, 0);
+  report_benchmark("bench_fastpath_simple", bench_fastpath_simple, 0);
+  for (int i = 8; i <= 512; i <<= 1) {
+    report_benchmark("bench_fastpath_stack", bench_fastpath_stack, i);
+  }
+  report_benchmark("bench_fastpath_stack_simple", bench_fastpath_stack_simple, 32);
+  report_benchmark("bench_fastpath_stack_simple", bench_fastpath_stack_simple, 8192);
   report_benchmark("bench_fastpath_rnd_dependent", bench_fastpath_rnd_dependent, 32);
-  // report_benchmark("bench_fastpath_rnd_dependent", bench_fastpath_rnd_dependent, 8192);
+  report_benchmark("bench_fastpath_rnd_dependent", bench_fastpath_rnd_dependent, 8192);
   return 0;
 }
