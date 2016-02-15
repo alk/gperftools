@@ -1597,6 +1597,19 @@ extern "C" PERFTOOLS_DLL_DECL int tc_set_new_mode(int flag) __THROW {
 //         heap-checker.cc depends on this to start a stack trace from
 //         the call to the (de)allocation function.
 
+#define USE_FAST_MALLOC
+#define USE_FAST_FREE
+
+#ifndef USE_FAST_MALLOC
+
+extern "C" void* tc_malloc(size_t size) __THROW {
+  void* result = do_malloc_or_cpp_alloc(size);
+  MallocHook::InvokeNewHook(result, size);
+  return result;
+}
+
+#else
+
 extern "C" void *tc_malloc_full(size_t size) __THROW
   ATTRIBUTE_SECTION(google_malloc);
 
@@ -1606,12 +1619,9 @@ extern "C" void* tc_malloc_full(size_t size) __THROW {
   return result;
 }
 
-// extern "C" void* tc_malloc_full(size_t size) __THROW {
-//   return tc_malloc(size);
-// }
+#ifndef USE_ASM_MALLOC_FAST
 
-
-extern "C" PERFTOOLS_DLL_DECL void *tc_malloc_c(size_t size) __THROW {
+extern "C" PERFTOOLS_DLL_DECL void *tc_malloc(size_t size) __THROW {
   if ((uintptr_t)(size >> 10) | (uintptr_t)(base::internal::new_hooks_.emptyness())) {
     return tc_malloc_full(size);
   }
@@ -1631,6 +1641,8 @@ extern "C" PERFTOOLS_DLL_DECL void *tc_malloc_c(size_t size) __THROW {
 
   return rv;
 }
+
+#else
 
 extern "C" PERFTOOLS_DLL_DECL void *tc_malloc(size_t size) __THROW {
   void *rv;
@@ -1687,10 +1699,16 @@ extern "C" PERFTOOLS_DLL_DECL void *tc_malloc(size_t size) __THROW {
   return rv;
 }
 
+#endif // USE_ASM_MALLOC_FAST
+
+#endif // USE_FAST_MALLOC
+
 // extern "C" PERFTOOLS_DLL_DECL void tc_free(void* ptr) __THROW {
 //   MallocHook::InvokeDeleteHook(ptr);
 //   do_free(ptr);
 // }
+
+#ifndef USE_FAST_FREE
 
 extern "C" PERFTOOLS_DLL_DECL void tc_free(void* ptr) __THROW
   __attribute__((alias("tc_deletearray_nothrow")));
@@ -1707,7 +1725,9 @@ extern "C" PERFTOOLS_DLL_DECL void tc_free_sized(void *ptr, size_t size) __THROW
   do_free_with_callback(ptr, &InvalidFree, true, size);
 }
 
-extern "C" PERFTOOLS_DLL_DECL void tc_free_sized_fast(void *ptr, size_t size) __THROW {
+#else
+
+extern "C" PERFTOOLS_DLL_DECL void tc_free_sized(void *ptr, size_t size) __THROW {
   if (!ptr) {
     return;
   }
@@ -1715,29 +1735,25 @@ extern "C" PERFTOOLS_DLL_DECL void tc_free_sized_fast(void *ptr, size_t size) __
   uintptr_t ored = (uintptr_t)(base::internal::delete_hooks_.emptyness()) |
     (uintptr_t)(size >> 10);
   if (ored) {
-    tc_free_sized(ptr, size);
+    tc_deletearray_sized(ptr, size);
     return;
   }
-  // if (ored || !heap || !ptr) {
-  //   tc_free_sized(ptr, size);
-  //   return;
-  // }
   if (!heap) {
-    tc_free_sized(ptr, size);
+    tc_deletearray_sized(ptr, size);
     return;
   }
   size_t cl = Static::sizemap()->SizeClassSmall(size);
   heap->Deallocate(ptr, cl);
 }
 
-extern "C" PERFTOOLS_DLL_DECL void tc_free_fast(void *ptr) __THROW {
+extern "C" PERFTOOLS_DLL_DECL void tc_free(void *ptr) __THROW {
   if ((base::internal::delete_hooks_.emptyness())) {
-    tc_free(ptr);
+    tc_deletearray(ptr);
     return;
   }
   ThreadCache *heap = ThreadCache::GetCacheIfPresent();
   if (!heap) {
-    tc_free(ptr);
+    tc_deletearray(ptr);
     return;
   }
   size_t cl;
@@ -1751,6 +1767,8 @@ extern "C" PERFTOOLS_DLL_DECL void tc_free_fast(void *ptr) __THROW {
     tc_free(ptr);
   }
 }
+
+#endif // USE_FAST_FREE
 
 #if defined(__GNUC__) && defined(__ELF__)
 

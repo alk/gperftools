@@ -65,10 +65,6 @@ static void bench_fastpath_dependent(long iterations,
   }
 }
 
-extern "C" void tc_free_fast(void *ptr);
-extern "C" void tc_free_sized_fast(void *ptr, size_t size);
-extern "C" void tc_free_sized(void *ptr, size_t size);
-
 static void bench_fastpath_simple(long iterations,
                                   uintptr_t param)
 {
@@ -78,8 +74,26 @@ static void bench_fastpath_simple(long iterations,
     if (!p) {
       abort();
     }
-    tc_free_fast(p);
-    // tc_free_sized_fast(p, sz);
+    free(p);
+    // next iteration will use same free list as this iteration. So it
+    // should be prevent next iterations malloc to go too far before
+    // free done. But using same size will make free "too fast" since
+    // we'll hit size class cache.
+  }
+}
+
+extern "C" void tc_free_sized(void *ptr, size_t size);
+
+static void bench_fastpath_simple_sized(long iterations,
+                                        uintptr_t param)
+{
+  size_t sz = 64;
+  for (; iterations>0; iterations--) {
+    void *p = malloc(sz);
+    if (!p) {
+      abort();
+    }
+    tc_free_sized(p, sz);
     // next iteration will use same free list as this iteration. So it
     // should be prevent next iterations malloc to go too far before
     // free done. But using same size will make free "too fast" since
@@ -208,11 +222,12 @@ void randomize_size_classes() {
 
 int main(void)
 {
-  randomize_size_classes();
+  //randomize_size_classes();
 
   report_benchmark("bench_fastpath_throughput", bench_fastpath_throughput, 0);
   report_benchmark("bench_fastpath_dependent", bench_fastpath_dependent, 0);
   report_benchmark("bench_fastpath_simple", bench_fastpath_simple, 0);
+  report_benchmark("bench_fastpath_simple_sized", bench_fastpath_simple_sized, 0);
   for (int i = 8; i <= 512; i <<= 1) {
     report_benchmark("bench_fastpath_stack", bench_fastpath_stack, i);
   }
