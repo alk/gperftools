@@ -187,8 +187,9 @@ class PERFTOOLS_DLL_DECL PageHeap {
   // The entries are 64 bits on 64-bit hardware and 16 bits on
   // 32-bit hardware, and we don't mind raciness as long as each read of
   // an entry yields a valid entry, not a partially updated entry.
-  size_t GetSizeClassIfCached(PageID p) const {
-    return pagemap_cache_.GetOrDefault(p, 0);
+  bool GetSizeClassIfCached(PageID p, size_t *rv) const {
+    // return pagemap_cache_.GetOrDefault(p, 0);
+    return pagemap_cache_.TryGet(p, rv);
   }
   void CacheSizeClass(PageID p, size_t cl) const { pagemap_cache_.Put(p, cl); }
 

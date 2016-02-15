@@ -820,8 +820,8 @@ class TCMallocImplementation : public MallocExtension {
     if ((p >> (kAddressBits - kPageShift)) > 0) {
       return kNotOwned;
     }
-    size_t cl = Static::pageheap()->GetSizeClassIfCached(p);
-    if (cl != 0) {
+    size_t cl;
+    if (Static::pageheap()->GetSizeClassIfCached(p, &cl)) {
       return kOwned;
     }
     const Span *span = Static::pageheap()->GetDescriptor(p);
@@ -976,9 +976,11 @@ static TCMallocGuard module_enter_exit_hook;
 
 static inline bool CheckCachedSizeClass(void *ptr) {
   PageID p = reinterpret_cast<uintptr_t>(ptr) >> kPageShift;
-  size_t cached_value = Static::pageheap()->GetSizeClassIfCached(p);
-  return cached_value == 0 ||
-      cached_value == Static::pageheap()->GetDescriptor(p)->sizeclass;
+  size_t cached_value;
+  if (!Static::pageheap()->GetSizeClassIfCached(p, &cached_value)) {
+    return true;
+  }
+  return cached_value == Static::pageheap()->GetDescriptor(p)->sizeclass;
 }
 
 static inline void* CheckedMallocResult(void *result) {
@@ -1273,8 +1275,13 @@ ALWAYS_INLINE void do_free_helper(void* ptr,
     goto non_zero;
   }
 
-  cl = Static::pageheap()->GetSizeClassIfCached(p);
-  if (UNLIKELY(cl == 0)) {
+  if (LIKELY(Static::pageheap()->GetSizeClassIfCached(p, &cl))) {
+    goto non_zero;
+  }
+
+  // cl = Static::pageheap()->GetSizeClassIfCached(p);
+  // if (UNLIKELY(cl == 0)) {
+  {
     span = Static::pageheap()->GetDescriptor(p);
     if (UNLIKELY(!span)) {
       // span can be NULL because the pointer passed in is NULL or invalid
@@ -1346,7 +1353,8 @@ inline size_t GetSizeWithCallback(const void* ptr,
   if (ptr == NULL)
     return 0;
   const PageID p = reinterpret_cast<uintptr_t>(ptr) >> kPageShift;
-  size_t cl = Static::pageheap()->GetSizeClassIfCached(p);
+  size_t cl = 0;
+  Static::pageheap()->GetSizeClassIfCached(p, &cl);
   if (cl != 0) {
     return Static::sizemap()->ByteSizeForClass(cl);
   } else {
@@ -1697,6 +1705,51 @@ extern "C" PERFTOOLS_DLL_DECL void tc_free_sized(void *ptr, size_t size) __THROW
   }
   MallocHook::InvokeDeleteHook(ptr);
   do_free_with_callback(ptr, &InvalidFree, true, size);
+}
+
+extern "C" PERFTOOLS_DLL_DECL void tc_free_sized_fast(void *ptr, size_t size) __THROW {
+  if (!ptr) {
+    return;
+  }
+  ThreadCache *heap = ThreadCache::GetCacheIfPresent();
+  uintptr_t ored = (uintptr_t)(base::internal::delete_hooks_.emptyness()) |
+    (uintptr_t)(size >> 10);
+  if (ored) {
+    tc_free_sized(ptr, size);
+    return;
+  }
+  // if (ored || !heap || !ptr) {
+  //   tc_free_sized(ptr, size);
+  //   return;
+  // }
+  if (!heap) {
+    tc_free_sized(ptr, size);
+    return;
+  }
+  size_t cl = Static::sizemap()->SizeClassSmall(size);
+  heap->Deallocate(ptr, cl);
+}
+
+extern "C" PERFTOOLS_DLL_DECL void tc_free_fast(void *ptr) __THROW {
+  if ((base::internal::delete_hooks_.emptyness())) {
+    tc_free(ptr);
+    return;
+  }
+  ThreadCache *heap = ThreadCache::GetCacheIfPresent();
+  if (!heap) {
+    tc_free(ptr);
+    return;
+  }
+  size_t cl;
+  const PageID p = reinterpret_cast<uintptr_t>(ptr) >> kPageShift;
+  if (!p) {
+    return;
+  }
+  if (LIKELY(Static::pageheap()->GetSizeClassIfCached(p, &cl))) {
+    heap->Deallocate(ptr, cl);
+  } else {
+    tc_free(ptr);
+  }
 }
 
 #if defined(__GNUC__) && defined(__ELF__)

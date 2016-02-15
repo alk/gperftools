@@ -65,6 +65,10 @@ static void bench_fastpath_dependent(long iterations,
   }
 }
 
+extern "C" void tc_free_fast(void *ptr);
+extern "C" void tc_free_sized_fast(void *ptr, size_t size);
+extern "C" void tc_free_sized(void *ptr, size_t size);
+
 static void bench_fastpath_simple(long iterations,
                                   uintptr_t param)
 {
@@ -74,7 +78,8 @@ static void bench_fastpath_simple(long iterations,
     if (!p) {
       abort();
     }
-    free(p);
+    tc_free_fast(p);
+    // tc_free_sized_fast(p, sz);
     // next iteration will use same free list as this iteration. So it
     // should be prevent next iterations malloc to go too far before
     // free done. But using same size will make free "too fast" since
@@ -193,15 +198,15 @@ int main(void)
 {
   randomize_size_classes();
 
-  report_benchmark("bench_fastpath_throughput", bench_fastpath_throughput, 0);
-  report_benchmark("bench_fastpath_dependent", bench_fastpath_dependent, 0);
+  // report_benchmark("bench_fastpath_throughput", bench_fastpath_throughput, 0);
+  // report_benchmark("bench_fastpath_dependent", bench_fastpath_dependent, 0);
   report_benchmark("bench_fastpath_simple", bench_fastpath_simple, 0);
-  for (int i = 8; i <= 512; i <<= 1) {
-    report_benchmark("bench_fastpath_stack", bench_fastpath_stack, i);
-  }
-  report_benchmark("bench_fastpath_stack_simple", bench_fastpath_stack_simple, 32);
-  report_benchmark("bench_fastpath_stack_simple", bench_fastpath_stack_simple, 8192);
-  report_benchmark("bench_fastpath_rnd_dependent", bench_fastpath_rnd_dependent, 32);
-  report_benchmark("bench_fastpath_rnd_dependent", bench_fastpath_rnd_dependent, 8192);
+  // for (int i = 8; i <= 512; i <<= 1) {
+  //   report_benchmark("bench_fastpath_stack", bench_fastpath_stack, i);
+  // }
+  // report_benchmark("bench_fastpath_stack_simple", bench_fastpath_stack_simple, 32);
+  // report_benchmark("bench_fastpath_stack_simple", bench_fastpath_stack_simple, 8192);
+  // report_benchmark("bench_fastpath_rnd_dependent", bench_fastpath_rnd_dependent, 32);
+  // report_benchmark("bench_fastpath_rnd_dependent", bench_fastpath_rnd_dependent, 8192);
   return 0;
 }

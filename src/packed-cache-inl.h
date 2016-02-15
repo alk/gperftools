@@ -118,6 +118,7 @@
 #include <stdint.h>                     // for uintptr_t
 #endif
 #include "base/basictypes.h"
+#include "common.h"
 #include "internal_logging.h"
 
 // A safe way of doing "(1 << n) - 1" -- without worrying about overflow
@@ -172,7 +173,24 @@ class PackedCache {
     // harmless.
     ASSERT(key == (key & kKeyMask));
     T entry = array_[Hash(key)];
-    return KeyMatch(entry, key) ? EntryToValue(entry) : default_value;
+    if (LIKELY(KeyMatch(entry, key))) {
+      return EntryToValue(entry);
+    }
+    return default_value;
+  }
+
+  bool TryGet(K key, V* rv) const {
+    // As with other code in this class, we touch array_ as few times
+    // as we can.  Assuming entries are read atomically (e.g., their
+    // type is uintptr_t on most hardware) then certain races are
+    // harmless.
+    ASSERT(key == (key & kKeyMask));
+    T entry = array_[Hash(key)];
+    if (LIKELY(KeyMatch(entry, key))) {
+      *rv = EntryToValue(entry);
+      return true;
+    }
+    return false;
   }
 
   void Clear(V value) {
