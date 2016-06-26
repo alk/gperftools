@@ -16,6 +16,7 @@
 /aclocal.m4
 /addressmap_unittest
 /addressmap_unittest.exe
+/altvarint_bench
 /atomicops_unittest
 /atomicops_unittest.exe
 /autom4te.cache/
@@ -75,6 +76,7 @@
 /malloc_extension_debug_test
 /malloc_extension_test
 /malloc_extension_test.exe
+/malloc_extension_tracing_test
 /malloc_hook_test
 /malloc_hook_test.exe
 /markidle_unittest
@@ -136,6 +138,7 @@
 /tcmalloc_minimal_large_heap_fragmentation_unittest.exe
 /tcmalloc_minimal_large_unittest
 /tcmalloc_minimal_large_unittest.exe
+/tcmalloc_minimal_tracing_unittest
 /tcmalloc_minimal_unittest
 /tcmalloc_minimal_unittest.exe
 /tcmalloc_unittest

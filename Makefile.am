@@ -552,6 +552,8 @@ tcm_min_asserts_unittest_SOURCES = src/tests/tcmalloc_unittest.cc \
                                     $(TCMALLOC_UNITTEST_INCLUDES)
 tcm_min_asserts_unittest_CXXFLAGS = -DNO_TCMALLOC_SAMPLES -DNO_HEAP_CHECK \
                                     $(PTHREAD_CFLAGS) $(AM_CXXFLAGS) $(NO_BUILTIN_CXXFLAGS)
+tcm_min_asserts_unittest_CFLAGS   = -DNO_TCMALLOC_SAMPLES -DNO_HEAP_CHECK \
+                                    $(PTHREAD_CFLAGS) $(AM_CFLAGS) $(NO_BUILTIN_CXXFLAGS)
 tcm_min_asserts_unittest_LDFLAGS = $(PTHREAD_CFLAGS) $(TCMALLOC_FLAGS)
 tcm_min_asserts_unittest_LDADD = $(LIBSPINLOCK) libmaybe_threads.la \
                                   liblogging.la $(PTHREAD_LIBS)
@@ -784,6 +786,44 @@ dist_doc_DATA += docs/overview.dot \
                  docs/threadheap.dot
 
 
+lib_LTLIBRARIES += libtcmalloc_minimal_tracing.la
+libtcmalloc_minimal_tracing_la_SOURCES =  src/tracingallocation.cc \
+                                          src/altvarint_codec.h \
+                                          src/altvarint_codec.cc \
+                                          src/malloc_trace_encoder.h \
+                                          src/malloc_trace_encoder.cc \
+                                          src/malloc_tracer.h \
+                                          src/malloc_tracer.cc \
+                                          src/tracer_buffer.h \
+                                          src/tracer_buffer.cc \
+                                          $(TCMALLOC_MINIMAL_INCLUDES)
+libtcmalloc_minimal_tracing_la_CXXFLAGS = -DNO_TCMALLOC_SAMPLES \
+                                          $(PTHREAD_CFLAGS) -DNDEBUG $(AM_CXXFLAGS)
+libtcmalloc_minimal_tracing_la_CFLAGS =   -DNO_TCMALLOC_SAMPLES \
+                                          $(PTHREAD_CFLAGS) -DNDEBUG $(AM_CFLAGS)
+# version_info gets passed to libtool
+libtcmalloc_minimal_tracing_la_LDFLAGS = $(libtcmalloc_minimal_la_LDFLAGS) \
+                                       -version-info @TCMALLOC_SO_VERSION@ \
+                                       $(PTHREAD_LIBS)
+libtcmalloc_minimal_tracing_la_LIBADD = $(libtcmalloc_minimal_la_LIBADD) $(LZ4_LIBS)
+
+LIBS_TO_WEAKEN += libtcmalloc_minimal_debug.la
+
+### Unittests
+
+TESTS += tcmalloc_minimal_tracing_unittest
+tcmalloc_minimal_tracing_unittest_SOURCES = $(tcmalloc_minimal_unittest_SOURCES)
+tcmalloc_minimal_tracing_unittest_CXXFLAGS = $(tcmalloc_minimal_unittest_CXXFLAGS) \
+                                             -DDEBUGALLOCATION -DTRACINGALLOCATION
+tcmalloc_minimal_tracing_unittest_LDFLAGS = $(tcmalloc_minimal_unittest_LDFLAGS)
+tcmalloc_minimal_tracing_unittest_LDADD = libtcmalloc_minimal_tracing.la $(PTHREAD_LIBS)
+
+TESTS += malloc_extension_tracing_test
+malloc_extension_tracing_test_SOURCES = $(malloc_extension_test_SOURCES)
+malloc_extension_tracing_test_CXXFLAGS = $(malloc_extension_test_CXXFLAGS)
+malloc_extension_tracing_test_LDFLAGS = $(malloc_extension_test_LDFLAGS)
+malloc_extension_tracing_test_LDADD = libtcmalloc_minimal_tracing.la $(PTHREAD_LIBS)
+
 ### ------- tcmalloc_minimal_debug (thread-caching malloc with debugallocation)
 
 if WITH_DEBUGALLOC
@@ -858,6 +898,7 @@ librun_benchmark_la_SOURCES = \
 	benchmark/run_benchmark.c benchmark/run_benchmark.h
 
 noinst_PROGRAMS += malloc_bench malloc_bench_shared \
+	malloc_bench_shared_full altvarint_bench \
 	binary_trees binary_trees_shared
 
 malloc_bench_SOURCES = benchmark/malloc_bench.cc
@@ -888,6 +929,12 @@ endif !OSX
 
 endif WITH_HEAP_PROFILER_OR_CHECKER
 
+altvarint_bench_SOURCES = benchmark/altvarint_codec_bench.cc \
+	src/altvarint_codec.cc src/altvarint_codec.h
+altvarint_bench_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS)
+altvarint_bench_LDFLAGS = $(PTHREAD_CFLAGS) $(TCMALLOC_FLAGS) -static
+altvarint_bench_LDADD = librun_benchmark.la $(PTHREAD_LIBS)
+
 binary_trees_SOURCES = benchmark/binary_trees.cc
 binary_trees_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS) $(NO_BUILTIN_CXXFLAGS)
 binary_trees_LDFLAGS = $(PTHREAD_CFLAGS) $(TCMALLOC_FLAGS) -static
@@ -897,6 +944,7 @@ binary_trees_shared_SOURCES = benchmark/binary_trees.cc
 binary_trees_shared_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS) $(NO_BUILTIN_CXXFLAGS)
 binary_trees_shared_LDFLAGS = $(PTHREAD_CFLAGS) $(TCMALLOC_FLAGS)
 binary_trees_shared_LDADD = libtcmalloc_minimal.la $(PTHREAD_LIBS)
+
 endif !MINGW
 
 ### ------- tcmalloc (thread-caching malloc + heap profiler + heap checker)

@@ -1591,7 +1591,8 @@ static int RunAllTests(int argc, char** argv) {
 using testing::RunAllTests;
 
 int main(int argc, char** argv) {
-#ifdef DEBUGALLOCATION    // debug allocation takes forever for huge allocs
+// debug allocation takes forever for huge allocs
+#if defined(DEBUGALLOCATION) && !defined(TRACINGALLOCATION)
   FLAGS_max_free_queue_size = 0;  // return freed blocks to tcmalloc immediately
 #endif
 
