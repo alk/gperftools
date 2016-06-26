@@ -75,6 +75,7 @@
 /malloc_extension_debug_test
 /malloc_extension_test
 /malloc_extension_test.exe
+/malloc_extension_tracing_test
 /malloc_hook_test
 /malloc_hook_test.exe
 /markidle_unittest
@@ -100,6 +101,7 @@
 /realloc_debug_unittest
 /realloc_unittest
 /realloc_unittest.exe
+/replay
 /sampler_debug_test
 /sampler_test
 /sampling_debug_test
@@ -136,6 +138,7 @@
 /tcmalloc_minimal_large_heap_fragmentation_unittest.exe
 /tcmalloc_minimal_large_unittest
 /tcmalloc_minimal_large_unittest.exe
+/tcmalloc_minimal_tracing_unittest
 /tcmalloc_minimal_unittest
 /tcmalloc_minimal_unittest.exe
 /tcmalloc_unittest
@@ -145,3 +148,4 @@
 /thread_dealloc_unittest.exe
 /unwind_bench
 /unwind_bench.exe
+/varint_bench

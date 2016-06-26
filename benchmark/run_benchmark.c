@@ -69,7 +69,7 @@ static double measure_once(struct internal_bench *b, long iterations)
 }
 
 #define TRIAL_NSEC 0.3E9
-#define TARGET_NSEC 3E9
+#define TARGET_NSEC 10E9
 
 static double run_benchmark(struct internal_bench *b)
 {

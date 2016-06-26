@@ -33,16 +33,24 @@
 
 #include "run_benchmark.h"
 
+#include "malloc_tracer.h"
+
 static void bench_fastpath_throughput(long iterations,
                                       uintptr_t param)
 {
   size_t sz = 32;
   for (; iterations>0; iterations--) {
-    void *p = malloc(sz);
+    char *p = (char *)malloc(sz);
+    // uintptr_t tok = MallocTracer::GetInstance()->TraceMalloc(sz);
+    // *reinterpret_cast<uintptr_t volatile *>(p) = tok;
+    // *reinterpret_cast<intptr_t volatile *>(p+8) = 0;
     if (!p) {
       abort();
     }
+    // char *p2 = p + *reinterpret_cast<uintptr_t volatile *>(p+8);
+    // tok = *reinterpret_cast<uintptr_t volatile *>(p2);
     free(p);
+    // MallocTracer::GetInstance()->TraceFree(tok);
     // this makes next iteration use different free list. So
     // subsequent iterations may actually overlap in time.
     sz = ((sz * 8191) & 511) + 16;
@@ -264,6 +272,7 @@ int main(void)
   randomize_size_classes();
 
   report_benchmark("bench_fastpath_throughput", bench_fastpath_throughput, 0);
+  exit(0);
   report_benchmark("bench_fastpath_dependent", bench_fastpath_dependent, 0);
   report_benchmark("bench_fastpath_simple", bench_fastpath_simple, 64);
   report_benchmark("bench_fastpath_simple", bench_fastpath_simple, 2048);
