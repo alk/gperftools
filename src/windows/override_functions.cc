@@ -66,8 +66,24 @@ extern "C" size_t _msize(void* p) {
   return MallocExtension::instance()->GetAllocatedSize(p);
 }
 
+#if defined(_MSC_VER) && _MSC_VER < 1400
+
 extern "C" intptr_t _get_heap_handle() {
   return 0;
+}
+
+#endif
+
+extern "C" void* _calloc_base(size_t n, size_t size) {
+  return calloc(n, size);
+}
+
+extern "C" void *_malloc_base(size_t n) { return malloc(n); }
+
+extern "C" void *_realloc_base(void *p, size_t n) { return realloc(p, n); }
+
+extern "C" void _free_base(void *p) {
+  free(p);
 }
 
 // The CRT heap initialization stub.
@@ -85,6 +101,10 @@ extern "C" void _heap_term() {
 
 extern "C" int _set_new_mode(int flag) {
   return tc_set_new_mode(flag);
+}
+
+extern "C" int _query_new_mode() {
+  return 0;
 }
 
 #ifndef NDEBUG
@@ -107,8 +127,28 @@ extern "C" void* _malloc_dbg(size_t size, int , const char*, int) {
   return malloc(size);
 }
 
+extern "C" void* _realloc_dbg(void *block, size_t size, int, const char*, int) {
+  return realloc(block, size);
+}
+
+extern "C" void* _realloc_dbg_nolock(void *block, size_t size, int, const char*, int) {
+  return realloc(block, size);
+}
+
+extern "C" void* _recalloc_dbg(void *block, size_t m, size_t size, int, const char*, int) {
+  return _realloc(block, size * m);
+}
+
+extern "C" void* _expand_dbg(void *block, size_t size, int, const char*, int) {
+  return realloc(block, size);
+}
+
 extern "C" void _free_dbg(void* ptr, int) {
   free(ptr);
+}
+
+extern "C" size_t _msize_dbg(void* p, int) {
+  return MallocExtension::instance()->GetAllocatedSize(p);
 }
 
 extern "C" void* _calloc_dbg(size_t n, size_t size, int, const char*, int) {
