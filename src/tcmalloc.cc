@@ -717,6 +717,7 @@ class TCMallocImplementation : public MallocExtension {
     }
 
     if (strcmp(name, "tcmalloc.aggressive_memory_decommit") == 0) {
+      SpinLockHolder l(Static::pageheap_lock());
       *value = size_t(Static::pageheap()->GetAggressiveDecommit());
       return true;
     }
@@ -734,6 +735,7 @@ class TCMallocImplementation : public MallocExtension {
     }
 
     if (strcmp(name, "tcmalloc.aggressive_memory_decommit") == 0) {
+      SpinLockHolder l(Static::pageheap_lock());
       Static::pageheap()->SetAggressiveDecommit(value != 0);
       return true;
     }
