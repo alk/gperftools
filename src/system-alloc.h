@@ -89,4 +89,13 @@ extern PERFTOOLS_DLL_DECL SysAllocator* tcmalloc_sys_alloc;
 // Number of bytes taken from system.
 extern PERFTOOLS_DLL_DECL size_t TCMalloc_SystemTaken;
 
+const size_t kMinimalUsefulGift = 1 << 20;
+
+extern PERFTOOLS_DLL_DECL void TCMalloc_GiftMemory(void *addr, size_t size);
+
+typedef void (*TCMalloc_PopulateFn)(void *ptr, size_t size);
+extern PERFTOOLS_DLL_DECL void TCMalloc_GiftViaAllocator(long long amount,
+                                                         SysAllocator *allocator,
+                                                         TCMalloc_PopulateFn fn);
+
 #endif /* TCMALLOC_SYSTEM_ALLOC_H_ */

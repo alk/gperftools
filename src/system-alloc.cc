@@ -32,6 +32,9 @@
 // Author: Sanjay Ghemawat
 
 #include <config.h>
+
+#include "system-alloc.h"
+
 #include <errno.h>                      // for EAGAIN, errno
 #include <fcntl.h>                      // for open, O_RDWR
 #include <stddef.h>                     // for size_t, NULL, ptrdiff_t
@@ -42,6 +45,7 @@
 #else
 #include <sys/types.h>
 #endif
+#include <string.h>                     // for memcpy
 #ifdef HAVE_MMAP
 #include <sys/mman.h>                   // for munmap, mmap, MADV_DONTNEED, etc
 #endif
@@ -463,8 +467,119 @@ SysAllocator *tc_get_sysalloc_override(SysAllocator *def)
   return def;
 }
 
+struct GiftedChunk {
+  uintptr_t ptr;
+  uintptr_t end_ptr;
+  bool has_next;
+};
+
+static GiftedChunk gifted;
+
+void TCMalloc_GiftMemory(void *addr, size_t size) {
+  COMPILE_ASSERT(((sizeof(MemoryAligner) - 1) & sizeof(MemoryAligner)) == 0,
+                 memory_aligner_has_power_of_2_size);
+
+  uintptr_t ptr = reinterpret_cast<uintptr_t>(addr);
+
+  if (ptr + size < ptr) {
+    return;
+  }
+
+  uintptr_t misalignment = (sizeof(MemoryAligner) - ptr) & (sizeof(MemoryAligner) - 1);
+  if (size < misalignment) {
+    return;
+  }
+  size -= misalignment;
+  ptr += misalignment;
+
+  if (size < kMinimalUsefulGift) {
+    return;
+  }
+
+  SpinLockHolder lock_holder(&spinlock);
+  bool has_next = (gifted.ptr != gifted.end_ptr);
+
+  if (has_next) {
+    uintptr_t old_chunk_ptr = (ptr + size - sizeof(GiftedChunk));
+    memcpy(reinterpret_cast<void *>(old_chunk_ptr),
+           &gifted,
+           sizeof(GiftedChunk));
+  }
+
+  gifted.has_next = has_next;
+  gifted.ptr = ptr;
+  gifted.end_ptr = ptr + size;
+}
+
+static bool MaybePopGifted() {
+  if (gifted.has_next) {
+    void *ptr = reinterpret_cast<void *>(gifted.end_ptr - sizeof(GiftedChunk));
+    memcpy(&gifted, ptr, sizeof(GiftedChunk));
+    memset(ptr, 0, sizeof(GiftedChunk));
+    return true;
+  }
+
+  return false;
+}
+
+static void *TryAllocFromGifted(size_t size, size_t alignment) {
+  uintptr_t ptr;
+  uintptr_t new_ptr;
+  bool ok = false;
+  do {
+    if (gifted.ptr + alignment < gifted.ptr) {
+      continue;
+    }
+
+    ptr = (gifted.ptr + alignment - 1) / alignment * alignment;
+    new_ptr = ptr + size;
+    if (new_ptr >= ptr && new_ptr <= gifted.end_ptr) {
+      ok = true;
+      break;
+    }
+  } while (MaybePopGifted());
+
+  if (!ok) {
+    return NULL;
+  }
+
+  gifted.ptr = new_ptr;
+
+  if (gifted.end_ptr - sizeof(GiftedChunk) < new_ptr) {
+    MaybePopGifted();
+  }
+
+  return reinterpret_cast<void *>(ptr);
+}
+
+void TCMalloc_GiftViaAllocator(long long amount, SysAllocator *allocator, TCMalloc_PopulateFn fn) {
+  size_t actual_size;
+  void *result = allocator->Alloc(amount, &actual_size, sizeof(MemoryAligner));
+  if (result == NULL) {
+    return;
+  }
+  if (fn) {
+    fn(result, actual_size);
+  } else {
+    // touch the memory to actually preallocate it
+    memset(result, 0, actual_size);
+  }
+  TCMalloc_GiftMemory(result, actual_size);
+}
+
+static void PopulateWithTHP(void *addr, size_t size) {
+#ifdef MADV_HUGEPAGE
+  if (EnvToBool("TCMALLOC_PREALLOCATE_THP", false)) {
+    madvise(addr, size, MADV_HUGEPAGE);
+  }
+#endif
+
+  memset(addr, 0, size);
+}
+
 static bool system_alloc_inited = false;
-void InitSystemAllocators(void) {
+
+static void InitSystemAllocators(void) {
   MmapSysAllocator *mmap = new (mmap_space.buf) MmapSysAllocator();
   SbrkSysAllocator *sbrk = new (sbrk_space.buf) SbrkSysAllocator();
 
@@ -485,7 +600,15 @@ void InitSystemAllocators(void) {
   }
 
   tcmalloc_sys_alloc = tc_get_sysalloc_override(sdef);
+
+  spinlock.Unlock();
+  TCMalloc_GiftViaAllocator(EnvToInt64("TCMALLOC_SBRK_PREALLOCATE_BYTES", 0),
+                            sbrk, PopulateWithTHP);
+  TCMalloc_GiftViaAllocator(EnvToInt64("TCMALLOC_MMAP_PREALLOCATE_BYTES", 0),
+                            mmap, PopulateWithTHP);
+  spinlock.Lock();
 }
+
 
 void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
                            size_t alignment) {
@@ -507,7 +630,12 @@ void* TCMalloc_SystemAlloc(size_t size, size_t *actual_size,
     actual_size = &actual_size_storage;
   }
 
-  void* result = tcmalloc_sys_alloc->Alloc(size, actual_size, alignment);
+  void* result = TryAllocFromGifted(size, alignment);
+  if (result != NULL) {
+    *actual_size = size;
+  } else {
+    result = tcmalloc_sys_alloc->Alloc(size, actual_size, alignment);
+  }
   if (result != NULL) {
     CHECK_CONDITION(
       CheckAddressBits<kAddressBits>(

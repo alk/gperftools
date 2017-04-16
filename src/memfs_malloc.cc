@@ -60,6 +60,7 @@
 #include "base/googleinit.h"
 #include "base/sysinfo.h"
 #include "internal_logging.h"
+#include "system-alloc.h"
 
 // TODO(sanjay): Move the code below into the tcmalloc namespace
 using tcmalloc::kLog;
@@ -265,6 +266,7 @@ REGISTER_MODULE_INITIALIZER(memfs_malloc, {
       new (hugetlb_space.buf) HugetlbSysAllocator(alloc);
     if (hp->Initialize()) {
       MallocExtension::instance()->SetSystemAllocator(hp);
+      TCMalloc_GiftViaAllocator(EnvToInt64("TCMALLOC_MEMFS_PREALLOCATE_BYTES", 0), hp, NULL);
     }
   }
 });
