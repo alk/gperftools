@@ -157,7 +157,7 @@ class ThreadCache {
    public:
     void Init(size_t size) {
       list_ = NULL;
-      length_ = 0;
+      length_ = 0x7fff0000;
       lowater_ = 0;
       max_length_ = 1;
       length_overages_ = 0;
@@ -166,7 +166,7 @@ class ThreadCache {
 
     // Return current length of list
     size_t length() const {
-      return length_;
+      return lowater_ + (length_ & 0xffff);
     }
 
     int32_t object_size() const {
@@ -178,10 +178,17 @@ class ThreadCache {
       return max_length_;
     }
 
+    void internal_set_length(uint32_t length) {
+      length_ = ((length - max_length_ + 0x8000) << 16) + (length - lowater_);
+      ASSERT(this->length() < 8193);
+    }
+
     // Set the maximum length of the list.  If 'new_max' > length(), the
     // client is responsible for removing objects from the list.
     void set_max_length(size_t new_max) {
+      uint32_t real_length = length();
       max_length_ = new_max;
+      internal_set_length(real_length);
     }
 
     // Return the number of times that length() has gone over max_length().
@@ -200,26 +207,52 @@ class ThreadCache {
 
     // Low-water mark management
     int lowwatermark() const { return lowater_; }
-    void clear_lowwatermark() { lowater_ = length_; }
+    void clear_lowwatermark() {
+      uint32_t real_length = length();
+      lowater_ = real_length;
+      internal_set_length(real_length);
+    }
 
-    uint32_t Push(void* ptr) {
-      uint32_t length = length_ + 1;
+    bool internal_increment_length() {
+#ifndef NDEBUG
+      size_t old_length = length();
+#endif
+      uint32_t new_length = length_ + 0x10001;
+      length_ = new_length;
+      ASSERT(old_length + 1 == length());
+      ASSERT(length() < 8193);
+      return (int32_t)(new_length) < 0;
+    }
+
+    bool Push(void* ptr) {
       SLL_Push(&list_, ptr);
-      length_ = length;
-      return length;
+      return internal_increment_length();
+    }
+
+    void internal_decrement_length() {
+#ifndef NDEBUG
+      size_t old_length = length();
+#endif
+      uint32_t new_length = length_ - 0x10001;
+      if (PREDICT_FALSE((int16_t)(new_length) < 0)) {
+        new_length++;
+        lowater_--;
+      }
+      length_ = new_length;
+      ASSERT(old_length - 1 == length());
+      ASSERT(lowater_ <= length());
+      ASSERT(length() < 8193);
     }
 
     void* Pop() {
       ASSERT(list_ != NULL);
-      length_--;
-      if (length_ < lowater_) lowater_ = length_;
+      internal_decrement_length();
       return SLL_Pop(&list_);
     }
 
     bool TryPop(void **rv) {
       if (SLL_TryPop(&list_, rv)) {
-        length_--;
-        if (PREDICT_FALSE(length_ < lowater_)) lowater_ = length_;
+        internal_decrement_length();
         return true;
       }
       return false;
@@ -231,14 +264,16 @@ class ThreadCache {
 
     void PushRange(int N, void *start, void *end) {
       SLL_PushRange(&list_, start, end);
-      length_ += N;
+      uint32_t old_length = length();
+      internal_set_length(old_length + N);
     }
 
     void PopRange(int N, void **start, void **end) {
       SLL_PopRange(&list_, N, start, end);
-      ASSERT(length_ >= N);
-      length_ -= N;
-      if (length_ < lowater_) lowater_ = length_;
+      ASSERT(length() >= N);
+      uint32_t new_length = length() - N;
+      if (new_length < lowater_) lowater_ = new_length;
+      internal_set_length(new_length);
     }
   };
 
@@ -394,9 +429,9 @@ inline ATTRIBUTE_ALWAYS_INLINE void ThreadCache::Deallocate(void* ptr, uint32 cl
   ASSERT(ptr != list->Next());
 
   int32_t size_left = size_left_;
-  uint32_t length = list->Push(ptr);
+  bool exceeded = list->Push(ptr);
 
-  if (PREDICT_FALSE(length > list->max_length())) {
+  if (PREDICT_FALSE(exceeded)) {
     ListTooLong(list, cl);
     return;
   }
