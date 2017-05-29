@@ -67,6 +67,8 @@ typedef ucontext ucontext_t;
 
 #include "gperftools/stacktrace.h"
 
+#include "packed-cache-inl.h"
+
 #if defined(__linux__) && defined(__i386__) && defined(__ELF__) && defined(HAVE_MMAP)
 // Count "push %reg" instructions in VDSO __kernel_vsyscall(),
 // preceding "syscall" or "sysenter".
@@ -135,12 +137,16 @@ static int CountPushInstructions(const unsigned char *const addr) {
 }
 #endif
 
+#define PAGE_SIZE_SHIFT 12
+
+static PackedCache<(sizeof(void*)*8 - PAGE_SIZE_SHIFT)> address_validness;
+
 // Given a pointer to a stack frame, locate and return the calling
 // stackframe, or return NULL if no stackframe can be found. Perform sanity
 // checks (the strictness of which is controlled by the boolean parameter
 // "STRICT_UNWINDING") to reduce the chance that a bad pointer is returned.
 template<bool STRICT_UNWINDING, bool WITH_CONTEXT>
-static void **NextStackFrame(void **old_sp, const void *uc) {
+static inline ATTRIBUTE_ALWAYS_INLINE void **NextStackFrame(void **old_sp, const void *uc) {
   void **new_sp = (void **) *old_sp;
 
 #if defined(__linux__) && defined(__i386__) && defined(HAVE_VDSO_SUPPORT)
@@ -229,7 +235,7 @@ static void **NextStackFrame(void **old_sp, const void *uc) {
 
   // Check that the transition from frame pointer old_sp to frame
   // pointer new_sp isn't clearly bogus
-  if (STRICT_UNWINDING) {
+  if (1) {
     // With the stack growing downwards, older stack frame must be
     // at a greater address that the current one.
     if (new_sp <= old_sp) return NULL;
@@ -256,16 +262,26 @@ static void **NextStackFrame(void **old_sp, const void *uc) {
   if ((uintptr_t)new_sp >= 0xffffe000) return NULL;
 #endif
 #ifdef HAVE_MMAP
-  if (!STRICT_UNWINDING) {
-    // Lax sanity checks cause a crash on AMD-based machines with
-    // VDSO-enabled kernels.
-    // Make an extra sanity check to insure new_sp is readable.
-    // Note: NextStackFrame<false>() is only called while the program
-    //       is already on its last leg, so it's ok to be slow here.
-    static int page_size = getpagesize();
+  if (!0) {
+    uintptr_t page_size = 1 << PAGE_SIZE_SHIFT;
     void *new_sp_aligned = (void *)((uintptr_t)new_sp & ~(page_size - 1));
-    if (msync(new_sp_aligned, page_size, MS_ASYNC) == -1)
-      return NULL;
+    void *old_sp_aligned = (void *)((uintptr_t)old_sp & ~(page_size - 1));
+    uint32 valid;
+
+    if (new_sp_aligned != old_sp_aligned
+        && !(address_validness.TryGet((uintptr_t)new_sp >> PAGE_SIZE_SHIFT, &valid)
+             && valid)) {
+      // Lax sanity checks cause a crash on AMD-based machines with
+      // VDSO-enabled kernels.
+      // Make an extra sanity check to insure new_sp is readable.
+      // Note: NextStackFrame<false>() is only called while the program
+      //       is already on its last leg, so it's ok to be slow here.
+      void *new_sp_aligned = (void *)((uintptr_t)new_sp & ~(page_size - 1));
+      if (msync(new_sp_aligned, page_size, MS_ASYNC) == -1) {
+        return NULL;
+      }
+      address_validness.Put((uintptr_t)new_sp >> PAGE_SIZE_SHIFT, 1);
+    }
   }
 #endif
   return new_sp;
