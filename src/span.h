@@ -37,17 +37,105 @@
 #define TCMALLOC_SPAN_H_
 
 #include <config.h>
+#include <set>
 #include "common.h"
+#include "base/logging.h"
+#include "page_heap_allocator.h"
 
 namespace tcmalloc {
 
+template <typename T, class LockingTag>
+class STLPageHeapAllocator {
+ public:
+  typedef size_t     size_type;
+  typedef ptrdiff_t  difference_type;
+  typedef T*         pointer;
+  typedef const T*   const_pointer;
+  typedef T&         reference;
+  typedef const T&   const_reference;
+  typedef T          value_type;
+
+  template <class T1> struct rebind {
+    typedef STLPageHeapAllocator<T1, LockingTag> other;
+  };
+
+  STLPageHeapAllocator() { }
+  STLPageHeapAllocator(const STLPageHeapAllocator&) { }
+  template <class T1> STLPageHeapAllocator(const STLPageHeapAllocator<T1, LockingTag>&) { }
+  ~STLPageHeapAllocator() { }
+
+  pointer address(reference x) const { return &x; }
+  const_pointer address(const_reference x) const { return &x; }
+
+  size_type max_size() const { return size_t(-1) / sizeof(T); }
+
+  void construct(pointer p, const T& val) { ::new(p) T(val); }
+  void construct(pointer p) { ::new(p) T(); }
+  void destroy(pointer p) { p->~T(); }
+
+  // There's no state, so these allocators are always equal
+  bool operator==(const STLPageHeapAllocator&) const { return true; }
+
+  pointer allocate(size_type n, const void* = 0) {
+    if (!underlying_.initialized) {
+      underlying_.allocator.Init();
+      underlying_.initialized = true;
+    }
+
+    CHECK_CONDITION(n == 1);
+    return underlying_.allocator.New();
+  }
+  void deallocate(pointer p, size_type n) {
+    CHECK_CONDITION(n == 1);
+    underlying_.allocator.Delete(p);
+  }
+
+ private:
+  struct Storage {
+    explicit Storage(base::LinkerInitialized x) {}
+    PageHeapAllocator<T> allocator;
+    bool initialized;
+  };
+  static Storage underlying_;
+};
+
+template<typename T, class LockingTag>
+typename STLPageHeapAllocator<T, LockingTag>::Storage STLPageHeapAllocator<T, LockingTag>::underlying_(base::LINKER_INITIALIZED);
+
+struct SpanBestFitLess;
+struct Span;
+
+typedef std::set<Span*, SpanBestFitLess, STLPageHeapAllocator<Span*, void> > SpanSet;
+
+struct SpanBestFitLess {
+  inline bool operator()(Span *, Span *);
+};
+
+
+struct SpanSetRevPtr {
+  char data[sizeof(SpanSet::iterator)];
+
+  SpanSet::iterator get_iterator() {
+    return *static_cast<SpanSet::iterator*>(static_cast<void *>(this));
+  }
+
+  void set_iterator(const SpanSet::iterator& val) {
+    new (this) SpanSet::iterator(val);
+  }
+};
+
 // Information kept for a span (a contiguous run of pages).
 struct Span {
+  Span() {}
   PageID        start;          // Starting page number
   Length        length;         // Number of pages in span
   Span*         next;           // Used when in link list
   Span*         prev;           // Used when in link list
-  void*         objects;        // Linked list of free objects
+  union {
+    void*         objects;      // Linked list of free objects
+    SpanSetRevPtr rev_ptr;      // "pointer" (std::set iterator) to
+                                // SpanSet entry pointing here
+  };
   unsigned int  refcount : 16;  // Number of non-free objects
   unsigned int  sizeclass : 8;  // Size-class for small objects (or 0)
   unsigned int  location : 2;   // Is the span on a freelist, and if so, which?
@@ -70,6 +158,14 @@ void Event(Span* span, char op, int v = 0);
 #else
 #define Event(s,o,v) ((void) 0)
 #endif
+
+inline bool SpanBestFitLess::operator()(Span *a, Span *b) {
+  if (a->length < b->length)
+    return true;
+  if (a->length > b->length)
+    return false;
+  return a->start < b->start;
+}
 
 // Allocator/deallocator for spans
 Span* NewSpan(PageID p, Length len);
