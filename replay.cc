@@ -133,64 +133,7 @@ public:
   typedef std::function<int (void *, size_t)> reader_fn_t;
   explicit EventsStream(reader_fn_t reader_fn) : reader_fn(reader_fn) {}
 
-  reader_fn_t reader_fn;
-  std::unordered_map<uint64_t, ThreadState> thread_states;
-  char *buf_ptr = buf;
-  char *buf_end = buf;
-
-  ThreadState *curr_thread = nullptr;
-  int64_t buf_size_left = 0;
-  bool have_buf = false;
-  bool end_of_buf = false;
-
-  events::Buf last_buf;
-
-  bool done = false;
-
-  // TODO: configurable page size
-  char buf[1 << 20] __attribute__((aligned(4096)));
-
   bool has_next() {return !done;}
-
-  void fill_buf() {
-    assert(buf_ptr + 10 > buf_end);
-    char *cp_start = buf + (reinterpret_cast<uint64_t>(buf_ptr) & 4095);
-    memmove(cp_start, buf_ptr, buf_end - buf_ptr);
-    buf_end -= (buf_ptr - cp_start);
-    buf_ptr = cp_start;
-
-    int rv = reader_fn(buf_end, buf + sizeof(buf) - buf_end);
-    if (rv < 0) {
-      perror("read");
-      assert(false);
-      abort();
-    }
-    buf_end += rv;
-    assert(buf_end != buf);
-  }
-
-  uint64_t read_varint() {
-    if (PREDICT_FALSE(buf_ptr + 10 > buf_end)) {
-      fill_buf();
-    }
-
-    VarintCodec::DecodeResult<uint64_t> res = VarintCodec::decode_unsigned(buf_ptr);
-
-    buf_ptr += res.advance;
-    assert(buf_ptr <= buf_end);
-
-    buf_size_left -= res.advance;
-    if (PREDICT_FALSE(buf_size_left <= 0)) {
-      if (PREDICT_FALSE(!have_buf)) {
-        buf_size_left = ((uint64_t)-1LL) >> 1;
-      } else {
-        assert(buf_size_left >= 0);
-        end_of_buf = true;
-        have_buf = false;
-      }
-    }
-    return res.value;
-  }
 
   EventUnion next() {
     EventUnion rv;
@@ -284,13 +227,67 @@ public:
     }
     return rv;
   }
+
+private:
+  reader_fn_t reader_fn;
+  std::unordered_map<uint64_t, ThreadState> thread_states;
+  char *buf_ptr = buf;
+  char *buf_end = buf;
+
+  ThreadState *curr_thread = nullptr;
+  int64_t buf_size_left = 0;
+  bool have_buf = false;
+  bool end_of_buf = false;
+
+  events::Buf last_buf;
+
+  bool done = false;
+
+  // TODO: configurable page size
+  char buf[1 << 20] __attribute__((aligned(4096)));
+
+  void fill_buf() {
+    assert(buf_ptr + 10 > buf_end);
+    char *cp_start = buf + (reinterpret_cast<uint64_t>(buf_ptr) & 4095);
+    memmove(cp_start, buf_ptr, buf_end - buf_ptr);
+    buf_end -= (buf_ptr - cp_start);
+    buf_ptr = cp_start;
+
+    int rv = reader_fn(buf_end, buf + sizeof(buf) - buf_end);
+    if (rv < 0) {
+      perror("read");
+      assert(false);
+      abort();
+    }
+    buf_end += rv;
+    assert(buf_end != buf);
+  }
+
+  uint64_t read_varint() {
+    if (PREDICT_FALSE(buf_ptr + 10 > buf_end)) {
+      fill_buf();
+    }
+
+    VarintCodec::DecodeResult<uint64_t> res = VarintCodec::decode_unsigned(buf_ptr);
+
+    buf_ptr += res.advance;
+    assert(buf_ptr <= buf_end);
+
+    buf_size_left -= res.advance;
+    if (PREDICT_FALSE(buf_size_left <= 0)) {
+      if (PREDICT_FALSE(!have_buf)) {
+        buf_size_left = ((uint64_t)-1LL) >> 1;
+      } else {
+        assert(buf_size_left >= 0);
+        end_of_buf = true;
+        have_buf = false;
+      }
+    }
+    return res.value;
+  }
 };
 
 char event_stream_space[sizeof(EventsStream)] __attribute__((aligned(4096)));
-
-void __attribute__((weak)) fake_consume(const EventUnion &u) {
-  // __asm__ __volatile__("" : : : "memory");
-}
 
 struct space_tree {
   typedef std::vector<uint64_t> bvector;
