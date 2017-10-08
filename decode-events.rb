@@ -221,11 +221,7 @@ end
 
 s = EventsStream.new(STDIN)
 
-4096.times do
-  p s.next
-end
-
-count = 4096
+count = 0
 while not s.eof?
   evt = s.next
   count += 1
