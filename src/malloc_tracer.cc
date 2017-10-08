@@ -96,7 +96,7 @@ static pthread_once_t first_tracer_setup_once = PTHREAD_ONCE_INIT;
 
 static tcmalloc::PageHeapAllocator<MallocTracer> malloc_tracer_allocator;
 
-static sem_t signal_competions;
+static sem_t signal_completions;
 static bool fully_setup;
 
 static union {
@@ -383,9 +383,11 @@ void MallocTracer::do_setup_tls() {
 void dump_signal_handler(int sig) {
   int saved_errno = errno;
 
-  SpinLockHolder h(&signal_lock);
-  MallocTracer::instance.ptr->DumpFromSignalLocked();
-  sem_post(&signal_competions);
+  {
+    SpinLockHolder h(&signal_lock);
+    MallocTracer::instance.ptr->DumpFromSignalLocked();
+  }
+  sem_post(&signal_completions);
 
   errno = saved_errno;
 }
@@ -427,7 +429,7 @@ static void do_setup_tail() {
   }
   sem_wait(&saver_thread_sem);
 
-  sem_init(&signal_competions, 0, 0);
+  sem_init(&signal_completions, 0, 0);
 
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));
@@ -672,19 +674,19 @@ void MallocTracer::DumpEverything() {
       // abort();
     }
 
-    // sem_wait(&signal_competions);
+    // sem_wait(&signal_completions);
     // signalled--;
   }
 
   // yes we need to hold the lock across all signal handler
   // executions. Because signal handlers assume they have the lock
   for (; signalled > 0; signalled--) {
-    sem_wait(&signal_competions);
+    sem_wait(&signal_completions);
   }
 
 #ifndef NDEBUG
   int val = 0;
-  sem_getvalue(&signal_competions, &val);
+  sem_getvalue(&signal_completions, &val);
   assert(val == 0);
 #endif
 }
