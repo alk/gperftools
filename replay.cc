@@ -52,7 +52,7 @@ struct EventUnion {
              (unsigned long long)(malloc.token), (int)(malloc.thread_id));
       break;
     case EventsEncoder::kEventFree:
-      printf("<free ts=%llu cpu=%d token=%llu thread_id=%d>\n",
+      printf("<free ts=%016llu cpu=%d token=%llu thread_id=%d>\n",
              (unsigned long long)ts, (int)cpu,
              (unsigned long long)(free.token), (int)(free.thread_id));
       break;
@@ -186,8 +186,8 @@ public:
 
       assert(thread_state == curr_thread);
 
-      thread_state->last_cpu = rv.buf.cpu;
-      thread_state->last_ts = rv.buf.ts;
+      // thread_state->last_cpu = rv.buf.cpu;
+      // thread_state->last_ts = rv.buf.ts;
 
       thread_state->consume_tok(rv.tok);
       break;
@@ -215,6 +215,9 @@ public:
       last_buf = rv.buf;
       buf_size_left = rv.buf.size;
       have_buf = true;
+
+      curr_thread->last_cpu = rv.buf.cpu;
+      curr_thread->last_ts = rv.buf.ts;
       break;
     }
     case EventsEncoder::kEventEnd:
@@ -431,6 +434,16 @@ struct ThreadReplayState {
 
   bool add_event(const EventUnion &ev, uint64_t counter) {
     if (has_next) {
+      // EventUnion* prev_event;
+      // if (!pending.empty()) {
+      //   prev_event = &pending.back();
+      // } else {
+      //   prev_event = &next_event;
+      // }
+      // if (prev_event->ts > ev.ts) {
+      //   abort();
+      // }
+
       pending.push_back(ev);
       return false;
     } else {
@@ -486,6 +499,7 @@ struct ReplayMachine {
   uint64_t count = 0;
   uint64_t total_read = 0;
   uint64_t dropped_count = 0;
+  uint64_t allocated_count = 0;
   uint64_t dropped_allocations = 0;
   int live_threads_count = 0;
 
@@ -633,6 +647,7 @@ struct ReplayMachine {
       ev.print();
       dropped_allocations++;
     }
+    allocated_count++;
     assert(inserted);
     // printf("allocated token %llu\n", (unsigned long long)token);
   }
@@ -683,8 +698,8 @@ struct ReplayMachine {
     }
   }
 
-  static const long long kDropThreshold = 25000000LL;
-  static const long long kMinPending =    15000000LL;
+  static constexpr long long kMinPending =    128LL<<20;
+  static constexpr long long kDropThreshold = kMinPending + 25000000LL;
 
   void loop() {
     bool seen_end = false;
@@ -696,6 +711,7 @@ struct ReplayMachine {
       } else if (ready_events.empty() || (total_read - count < kMinPending)) {
         if (fetch_next_event()) {
           seen_end = true;
+          printf("found end at total_read = %lld, while pending is %lld\n", (long long)total_read, (long long)(total_read - count));
           continue;
         }
         if (total_read - count >= kDropThreshold) {
@@ -735,6 +751,7 @@ struct ReplayMachine {
       advance_thread_state(st);
     }
     printf("left_allocated = %lld\n", (long long)(allocated.size()));
+    printf("total_allocated = %lld\n", (long long)(allocated_count));
     printf("dropped_count = %llu\n", (unsigned long long)dropped_count);
     printf("dropped_allocations = %llu\n", (unsigned long long)dropped_allocations);
     printf("left_pending_free = %lld\n", (long long)(pending_frees.size()));
