@@ -98,6 +98,7 @@ static tcmalloc::PageHeapAllocator<MallocTracer> malloc_tracer_allocator;
 
 static sem_t signal_completions;
 static bool fully_setup;
+static bool no_more_writes;
 
 static union {
   struct {
@@ -537,6 +538,9 @@ static void save_buf_internal(int to_write) {
 }
 
 static void append_buf_locked(const char *buf, size_t size) {
+  if (no_more_writes) {
+    return;
+  }
   if (fd_buf_pos + size > sizeof(fd_buf[0])) {
     save_buf();
   }
@@ -712,7 +716,14 @@ MallocTracer::~MallocTracer() {
 }
 
 static void finalize_buf() {
-  SpinLockHolder h(&lock);
+  // saving rest of trace may still malloc, particularly if saver
+  // thread uses snappy. So we need to drop look soon. But we drop all
+  // further buffer writes.
+  {
+    SpinLockHolder h(&lock);
+    no_more_writes = true;
+  }
+
   if (fd_buf_pos >= 4096) {
     save_buf();
   }

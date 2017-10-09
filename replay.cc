@@ -698,7 +698,7 @@ struct ReplayMachine {
     }
   }
 
-  static constexpr long long kMinPending =    128LL<<20;
+  static constexpr long long kMinPending =    75LL<<20;
   static constexpr long long kDropThreshold = kMinPending + 25000000LL;
 
   void loop() {
