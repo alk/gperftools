@@ -292,139 +292,6 @@ private:
 
 char event_stream_space[sizeof(EventsStream)] __attribute__((aligned(4096)));
 
-struct space_tree {
-  typedef std::vector<uint64_t> bvector;
-
-  bvector level0;
-  bvector level1;
-  bvector level2;
-  bvector level3;
-
-  bvector level1_empty;
-  bvector level2_empty;
-  bvector level3_empty;
-
-  static unsigned bsf(uint64_t p) {
-    assert(p != 0);
-    return __builtin_ffsll(p) - 1;
-  }
-
-  bool find_set_bit(const bvector &v, uint64_t *pos) {
-    for (auto i = v.begin(); i != v.end(); i++) {
-      uint64_t val = *i;
-      if (val != 0) {
-        *pos = (i - v.begin())*64 + bsf(val);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  template <bool bval>
-  bool __set_bit(uint64_t pos, bvector &v, uint64_t *val_p) {
-    uint64_t val = v[pos / 64];
-    if (!bval) {
-      *val_p = val;
-      val &= ~(1ULL << (pos % 64));
-      v[pos / 64] = val;
-    } else {
-      uint64_t new_val = val | (1ULL << (pos % 64));
-      v[pos / 64] = new_val;
-      *val_p = new_val;
-    }
-    return (val == 0);
-  }
-
-  template <bool bval>
-  void set_bit(uint64_t pos) {
-    uint64_t new_val;
-    if (!__set_bit<bval>(pos, level0, &new_val)) {
-      if (new_val == (uint64_t)(int64_t)-1) {
-        pos /= 64;
-        if (!__set_bit<bval>(pos, level1_empty, &new_val)) {
-          return;
-        }
-        pos /= 64;
-        if (!__set_bit<bval>(pos, level2_empty, &new_val)) {
-          return;
-        }
-        pos /= 64;
-        __set_bit<bval>(pos, level3_empty, &new_val);
-      }
-      return;
-    }
-    pos /= 64;
-    if (!__set_bit<bval>(pos, level1, &new_val)) {
-      return;
-    }
-    pos /= 64;
-    if (!__set_bit<bval>(pos, level2, &new_val)) {
-      return;
-    }
-    pos /= 64;
-    __set_bit<bval>(pos, level3, &new_val);
-  }
-
-  struct thread_cache {
-    uint64_t base;
-    uint64_t bits;
-  };
-
-  uint64_t allocate_bunch(thread_cache *p) {
-    uint64_t pos3;
-    bool ok = find_set_bit(level3_empty, &pos3);
-    if (!ok) {
-      return allocate_new_id();
-    }
-
-    unsigned p2 = bsf(level2_empty[pos3]);
-    uint64_t pos2 = pos3 * 64 + p2;
-    unsigned p1 = bsf(level1_empty[pos2]);
-    uint64_t pos1 = pos2 * 64 + p1;
-    assert(level0[pos1] == (uint64_t)(int64_t)-1);
-    p->bits = (uint64_t)(int64_t)-2;
-    p->base = pos1 * 64;
-    return p->base;
-  }
-
-  uint64_t allocate_id(thread_cache *p) {
-    if (p) {
-      if (p->bits) {
-        unsigned i = bsf(p->bits);
-        p->bits ^= 1ULL << i;
-        return p->base + i;
-      }
-      return allocate_bunch(p);
-    }
-
-    uint64_t pos3;
-    bool ok = find_set_bit(level3, &pos3);
-    if (!ok) {
-      return allocate_new_id();
-    }
-    unsigned p2 = bsf(level2[pos3]);
-    uint64_t pos2 = pos3 * 64 + p2;
-    unsigned p1 = bsf(level1[pos2]);
-    uint64_t pos1 = pos2 * 64 + p1;
-    unsigned p0 = bsf(level0[pos1]);
-    uint64_t pos0 = pos1 * 64 + p0;
-    set_bit<false>(pos0);
-    return pos0;
-  }
-
-  void free_id(uint64_t id) {
-    set_bit<true>(id);
-  }
-
-  uint64_t allocate_new_id() {
-    uint64_t idx = level0.size();
-    level0.push_back(0);
-    set_bit<true>(idx * 64);
-    level0[idx] = (uint64_t)(int64_t)-2;
-    return idx * 64;
-  }
-};
-
 struct ThreadReplayState {
   EventUnion next_event;
   bool has_next = false;
@@ -485,6 +352,62 @@ void dump_heap_and_exit(void) {
 
 #endif
 
+class DumpMachine {
+public:
+  struct ThreadState {
+    const uint64_t thread_id;
+    const ThreadReplayState * const st;
+    std::vector<Instruction> instructions;
+
+    ThreadState(uint64_t thread_id, ThreadReplayState* st) : thread_id(thread_id), st(st) {}
+  };
+  typedef std::function<int (void *, size_t)> writer_fn_t;
+  DumpMachine(writer_fn_t writer_fn) : writer_fn_(writer_fn) {}
+
+  void consume_event(const EventUnion& ev, ThreadReplayState *st) {
+    auto p = per_thread_instructions.emplace(thread_id, {ev.malloc.thread_id, st});
+    auto thread_state = p.first;
+
+    switch (ev.type) {
+    case EventsEncoder::kEventMalloc:
+    case EventsEncoder::kEventMemalign: {
+      auto reg = ids_tree_.allocate_new();
+      allocated[ev.tok] = reg;
+      thread_vector->instructions.push_back(Instruction::Malloc(reg, ev.size));
+      break;
+    };
+    case EventsEncoder::kEventFree: {
+      assert(allocated.count(ev.tok) == 1);
+      auto reg = allocated[ev.tok];
+      thread_vector->instructions.push_back(Instruction::Free(reg));
+      allocated.erase(ev.tok);
+      freed_this_iteration.insert(reg);
+      break;
+    };
+    case EventsEncoder::kEventRealloc: {
+      auto reg = allocated[ev.tok];
+      thread_vector->push_back(Free(reg));
+      freed_this_iteration.insert(reg);
+      reg = allocate_id();
+      allocated[ev.tok] = reg;
+      thread_vector->push_back(Malloc(reg, ev.size));
+      break;
+    };
+    } // switch
+  }
+    
+  }
+
+
+private:
+  writer_fn_t writer_fn_;
+  space_tree ids_space_;
+  std::unordered_map<uint64_t, std::unique_ptr<ThreadState>> per_thread_instructions_;
+  std::unordered_set<uint64_t> freed_this_iteration_;
+  // maps tok -> register number
+  std::unordered_map<uint64_t, uint64_t> allocated;
+};
+
 struct ReplayMachine {
   std::deque<ThreadReplayState> states;
   std::unordered_map<uint64_t, ThreadReplayState *> pending_frees;
@@ -518,7 +441,7 @@ struct ReplayMachine {
 
   EventUnion prev_ev = {};
 
-  void consume_event(const EventUnion &ev) {
+  void consume_event(const EventUnion &ev, ThreadReplayState *st) {
     uint64_t ts = ev.ts;
     if (ts < prev_ts) {
       uint64_t amount = prev_ts - ts;
@@ -728,7 +651,7 @@ struct ReplayMachine {
       EventUnion &ev = st->next_event;
 
       count++;
-      consume_event(ev);
+      consume_event(ev, st);
 
       switch (ev.type) {
       case EventsEncoder::kEventMalloc:
