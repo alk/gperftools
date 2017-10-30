@@ -352,68 +352,12 @@ void dump_heap_and_exit(void) {
 
 #endif
 
-class DumpMachine {
-public:
-  struct ThreadState {
-    const uint64_t thread_id;
-    const ThreadReplayState * const st;
-    std::vector<Instruction> instructions;
-
-    ThreadState(uint64_t thread_id, ThreadReplayState* st) : thread_id(thread_id), st(st) {}
-  };
-  typedef std::function<int (void *, size_t)> writer_fn_t;
-  DumpMachine(writer_fn_t writer_fn) : writer_fn_(writer_fn) {}
-
-  void consume_event(const EventUnion& ev, ThreadReplayState *st) {
-    auto p = per_thread_instructions.emplace(thread_id, {ev.malloc.thread_id, st});
-    auto thread_state = p.first;
-
-    switch (ev.type) {
-    case EventsEncoder::kEventMalloc:
-    case EventsEncoder::kEventMemalign: {
-      auto reg = ids_tree_.allocate_new();
-      allocated[ev.tok] = reg;
-      thread_vector->instructions.push_back(Instruction::Malloc(reg, ev.size));
-      break;
-    };
-    case EventsEncoder::kEventFree: {
-      assert(allocated.count(ev.tok) == 1);
-      auto reg = allocated[ev.tok];
-      thread_vector->instructions.push_back(Instruction::Free(reg));
-      allocated.erase(ev.tok);
-      freed_this_iteration.insert(reg);
-      break;
-    };
-    case EventsEncoder::kEventRealloc: {
-      auto reg = allocated[ev.tok];
-      thread_vector->push_back(Free(reg));
-      freed_this_iteration.insert(reg);
-      reg = allocate_id();
-      allocated[ev.tok] = reg;
-      thread_vector->push_back(Malloc(reg, ev.size));
-      break;
-    };
-    } // switch
-  }
-    
-  }
-
-
-private:
-  writer_fn_t writer_fn_;
-  space_tree ids_space_;
-  std::unordered_map<uint64_t, std::unique_ptr<ThreadState>> per_thread_instructions_;
-  std::unordered_set<uint64_t> freed_this_iteration_;
-  // maps tok -> register number
-  std::unordered_map<uint64_t, uint64_t> allocated;
-};
-
 struct ReplayMachine {
   std::deque<ThreadReplayState> states;
   std::unordered_map<uint64_t, ThreadReplayState *> pending_frees;
   std::unordered_set<uint64_t> allocated;
   std::unordered_set<uint64_t> dropped;
-  space_tree ids_space;
+  // space_tree ids_space;
   std::priority_queue<ThreadReplayState *,
                       std::vector<ThreadReplayState *>,
                       ReadyReplyStateGreater> ready_events;
