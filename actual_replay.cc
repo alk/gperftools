@@ -1,11 +1,22 @@
 // -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 #include "actual_replay.h"
 
-ThreadState* find_thread(uint64_t thread_id,
-                         bool *live_ptr) {
+ReplayDumper::ThreadState* ReplayDumper::find_thread(
+    uint64_t thread_id, bool *live_ptr) {
   auto pair = per_thread_instructions_.emplace(
-    thread_id, {thread_id, live_ptr});
+    thread_id, ThreadState(thread_id, live_ptr));
   return &(pair.first->second);
+}
+
+constexpr int kIterationSize = 4096;
+
+void ReplayDumper::after_record() {
+  iteration_size++;
+  if (iteration_size < kIterationSize) {
+    return;
+  }
+
+  flush_chunk();
 }
 
 void ReplayDumper::record_malloc(
@@ -15,17 +26,21 @@ void ReplayDumper::record_malloc(
   auto reg = ids_space_.allocate_id();
   allocated_[tok] = reg;
   state->instructions.push_back(Instruction::Malloc(reg, size));
+
+  after_record();
 }
 
 void ReplayDumper::record_free(
   ThreadState* state, uint64_t tok, uint64_t timestamp) {
 
-  assert(allocated_.cound(tok) == 1);
+  assert(allocated_.count(tok) == 1);
   auto reg = allocated_[tok];
   allocated_.erase(tok);
   freed_this_iteration_.insert(reg);
 
   state->instructions.push_back(Instruction::Free(reg));
+
+  after_record();
 }
 
 struct ChunkInfo {
@@ -66,4 +81,5 @@ void ReplayDumper::flush_chunk() {
   }
 
   per_thread_instructions_.clear();
+  iteration_size = 0;
 }

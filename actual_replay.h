@@ -1,8 +1,12 @@
 // -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 #ifndef ACTUAL_REPLAY_H
 #define ACTUAL_REPLAY_H
-#include <vector>
+#include <assert.h>
+#include <functional>
+#include <stdint.h>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 class IdTree {
 public:
@@ -41,7 +45,7 @@ private:
   // returns true iff higher level needs to flip
   static bool set_bit_vector(uint64_t pos, bool bval, bvector &v) {
     auto divpos = pos / 64;
-    if (v.size() =< divpos) {
+    if (v.size() <= divpos) {
       assert(v.size() == divpos);
       v.push_back(~0ULL);
     }
@@ -60,19 +64,19 @@ private:
   }
 
   void set_bit(uint64_t pos, bool bval) {
-    if (!set_bit_vector(pos, val, level0)) {
+    if (!set_bit_vector(pos, bval, level0)) {
       return;
     }
     pos /= 64;
-    if (!set_bit_vector(pos, val, level1)) {
+    if (!set_bit_vector(pos, bval, level1)) {
       return;
     }
     pos /= 64;
-    if (!set_bit_vector(pos, val, level2)) {
+    if (!set_bit_vector(pos, bval, level2)) {
       return;
     }
     pos /= 64;
-    set_bit_vector(pos, val, level3);
+    set_bit_vector(pos, bval, level3);
   }
 };
 
@@ -85,8 +89,8 @@ inline uint64_t IdTree::allocate_id() {
     return pos;
   }
 
-  unsigned p2 = bsf(level2[pos3]);
-  uint64_t pos2 = pos3 * 64 + p2;
+  unsigned p2 = bsf(level2[pos]);
+  uint64_t pos2 = pos * 64 + p2;
   unsigned p1 = bsf(level1[pos2]);
   uint64_t pos1 = pos2 * 64 + p1;
   unsigned p0 = bsf(level0[pos1]);
@@ -103,9 +107,9 @@ struct Instruction {
   static constexpr uint64_t kMalloc = 0;
   static constexpr uint64_t kFree   = 1;
 
-  uint64_t type:8 = {};
-  uint64_t reg:58 = {};
-  uint64_t size = {};
+  uint64_t type:8;
+  uint64_t reg:58;
+  uint64_t size;
   // alignment...
 
   static Instruction Malloc(int reg, uint64_t size) {
@@ -124,6 +128,7 @@ struct Instruction {
 };
 
 class ReplayDumper {
+public:
   struct ThreadState {
     const uint64_t thread_id;
     bool * const live_ptr;
@@ -132,9 +137,8 @@ class ReplayDumper {
     ThreadState(uint64_t thread_id, bool* live_ptr)
       : thread_id(thread_id), live_ptr(live_ptr) {}
   };
-public:
   typedef std::function<int (void *, size_t)> writer_fn_t;
-  ReplayDumper(writer_fn_t writer_fn) : writer_fn_(writer_fn) {}
+  ReplayDumper(const writer_fn_t& writer_fn) : writer_fn_(writer_fn) {}
 
   ThreadState* find_thread(uint64_t thread_id, bool *live_ptr);
 
@@ -146,12 +150,15 @@ public:
   void flush_chunk();
 
 private:
+  void after_record();
+
   writer_fn_t writer_fn_;
   IdTree ids_space_;
   std::unordered_map<uint64_t, ThreadState> per_thread_instructions_;
   std::unordered_set<uint64_t> freed_this_iteration_;
   // maps tok -> register number
   std::unordered_map<uint64_t, uint64_t> allocated_;
+  int iteration_size{};
 };
 
 #endif

@@ -24,6 +24,7 @@
 
 #include "varint_codec.h"
 #include "malloc_trace_encoder.h"
+#include "actual_replay.h"
 
 #define PREDICT_FALSE(cond) __builtin_expect((cond), 0)
 #define PREDICT_TRUE(cond) __builtin_expect((cond), 1)
@@ -353,6 +354,7 @@ void dump_heap_and_exit(void) {
 #endif
 
 struct ReplayMachine {
+  ReplayDumper dumper_;
   std::deque<ThreadReplayState> states;
   std::unordered_map<uint64_t, ThreadReplayState *> pending_frees;
   std::unordered_set<uint64_t> allocated;
@@ -371,7 +373,7 @@ struct ReplayMachine {
   int live_threads_count = 0;
 
   EventsStream *str;
-  ReplayMachine(EventsStream *str) : str(str) {
+  ReplayMachine(EventsStream *str, const ReplayDumper::writer_fn_t& writer_fn) : dumper_(writer_fn), str(str) {
     start = time(nullptr);
   }
 
@@ -384,6 +386,10 @@ struct ReplayMachine {
   uint64_t step_back_skip_count = 0;
 
   EventUnion prev_ev = {};
+
+  // ReplayDumper::ThreadState* thread_to_dumper(const EventUnionThreadReplayState *st) {
+  //   // TODO: find real thread id of st somehow
+  // }
 
   void consume_event(const EventUnion &ev, ThreadReplayState *st) {
     uint64_t ts = ev.ts;
@@ -426,6 +432,24 @@ struct ReplayMachine {
     // if (count >= 200000000LLU) {
     //   dump_heap_and_exit();
     // }
+
+    ReplayDumper::ThreadState* dst = dumper_.find_thread(ev.malloc.thread_id, &st->live);
+
+    switch (ev.type) {
+    case EventsEncoder::kEventMalloc:
+      dumper_.record_malloc(dst, ev.malloc.token, ev.malloc.size, ev.ts);
+      break;
+    case EventsEncoder::kEventFree:
+      dumper_.record_free(dst, ev.free.token, ev.ts);
+      break;
+    case EventsEncoder::kEventMemalign:
+      dumper_.record_malloc(dst, ev.memalign.token, ev.memalign.size, ev.ts);
+      break;
+    case EventsEncoder::kEventRealloc:
+      dumper_.record_free(dst, ev.realloc.old_token, ev.ts);
+      dumper_.record_malloc(dst, ev.realloc.new_token, ev.realloc.new_size, ev.ts);
+      break;
+    }
   }
 
   bool is_interesting_event(const EventUnion &ev) {
@@ -654,20 +678,52 @@ int main(int argc, char **argv)
     int rv = open(argv[1], O_RDONLY);
     if (rv < 0) {
       perror("open");
+      abort();
     }
     dup2(rv, 0);
     close(rv);
+  }
+
+  ReplayDumper::writer_fn_t replay_writer = +[](void *dummy, size_t size) -> int {
+    return size;
+  };
+
+  FILE* output_file = nullptr;
+
+  if (argc > 2) {
+    output_file = fopen(argv[2], "wb");
+    if (output_file == nullptr) {
+      perror("fopen");
+      abort();
+    }
+    replay_writer = [&output_file](void *buffer, size_t size) -> int {
+      fwrite_unlocked(buffer, 1, size, output_file);
+      return size;
+    };
   }
 
   signal(SIGINT, [](int dummy) {
       exit(0);
     });
 
+  uint64_t replay_writer_written = 0;
+  ReplayDumper::writer_fn_t counting_replay_writer = [&replay_writer, &replay_writer_written](void *buf, size_t size) -> int {
+    replay_writer_written += size;
+    return replay_writer(buf, size);
+  };
+
   EventsStream::reader_fn_t reader = [](void *ptr, size_t sz) -> int {
     return read(0, ptr, sz);
   };
   EventsStream *str = new (&event_stream_space) EventsStream(reader);
-  ReplayMachine r(str);
+  ReplayMachine r(str, counting_replay_writer);
   r.loop();
+
+  if (output_file != nullptr) {
+    fclose(output_file);
+  }
+
+  printf("replay_writter written: %lld\n", (long long)(replay_writer_written));
+
   return 0;
 }
