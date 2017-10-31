@@ -8,6 +8,9 @@
 #include <unordered_set>
 #include <vector>
 
+#define PREDICT_FALSE(cond) __builtin_expect((cond), 0)
+#define PREDICT_TRUE(cond) __builtin_expect((cond), 1)
+
 class IdTree {
 public:
   uint64_t allocate_id();
@@ -34,7 +37,7 @@ private:
   static bool find_set_bit(const bvector &v, uint64_t *pos) {
     for (auto i = v.begin(); i != v.end(); i++) {
       uint64_t val = *i;
-      if (val != 0) {
+      if (PREDICT_TRUE(val != 0)) {
         *pos = (i - v.begin())*64 + bsf(val);
         return true;
       }
@@ -45,10 +48,7 @@ private:
   // returns true iff higher level needs to flip
   static bool set_bit_vector(uint64_t pos, bool bval, bvector &v) {
     auto divpos = pos / 64;
-    if (v.size() <= divpos) {
-      assert(v.size() == divpos);
-      v.push_back(~0ULL);
-    }
+    assert(divpos < v.size());
     uint64_t word = v[divpos];
     if (bval) {
       auto new_val = word | (1ULL << (pos % 64));
@@ -83,18 +83,52 @@ private:
 inline uint64_t IdTree::allocate_id() {
   uint64_t pos;
   bool ok = find_set_bit(level3, &pos);
-  if (!ok) {
-    pos = level0.size() * 64;
-    set_bit(pos, false);
-    return pos;
+  if (PREDICT_FALSE(!ok)) {
+    size_t sz = level3.size();
+    pos = sz * 64;
+    assert(level2.size() == sz * 64);
+    sz /= 64;
+    assert(level1.size() == sz * 64);
+    sz /= 64;
+    assert(level0.size() == sz * 64);
+    level3.push_back(~0ULL);
   }
 
-  unsigned p2 = bsf(level2[pos]);
-  uint64_t pos2 = pos * 64 + p2;
-  unsigned p1 = bsf(level1[pos2]);
-  uint64_t pos1 = pos2 * 64 + p1;
-  unsigned p0 = bsf(level0[pos1]);
-  uint64_t pos0 = pos1 * 64 + p0;
+  uint64_t pos2;
+  if (PREDICT_FALSE(pos >= level2.size())) {
+    size_t sz = level2.size();
+    assert(sz == pos);
+    pos2 = sz * 64;
+    assert(level1.size() == sz * 64);
+    sz /= 64;
+    assert(level0.size() == sz * 64);
+    level2.push_back(~0ULL);
+  } else {
+    unsigned p2 = bsf(level2[pos]);
+    pos2 = pos * 64 + p2;
+  }
+
+  uint64_t pos1;
+  if (PREDICT_FALSE(pos2 >= level1.size())) {
+    size_t sz = level1.size();
+    assert(sz == pos2);
+    pos1 = sz * 64;
+    assert(level0.size() == sz * 64);
+    level1.push_back(~0ULL);
+  } else {
+    unsigned p1 = bsf(level1[pos2]);
+    pos1 = pos2 * 64 + p1;
+  }
+  uint64_t pos0;
+  if (PREDICT_FALSE(pos1 >= level0.size())) {
+    size_t sz = level0.size();
+    assert(sz == pos1);
+    pos0 = sz * 64;
+    level0.push_back(~0ULL);
+  } else {
+    unsigned p0 = bsf(level0[pos1]);
+    pos0 = pos1 * 64 + p0;
+  }
   set_bit(pos0, false);
   return pos0;
 }

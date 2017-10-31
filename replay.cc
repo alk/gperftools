@@ -26,9 +26,6 @@
 #include "malloc_trace_encoder.h"
 #include "actual_replay.h"
 
-#define PREDICT_FALSE(cond) __builtin_expect((cond), 0)
-#define PREDICT_TRUE(cond) __builtin_expect((cond), 1)
-
 struct EventUnion {
   uint8_t type;
   bool new_thread;

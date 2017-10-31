@@ -947,6 +947,13 @@ binary_trees_shared_SOURCES = benchmark/binary_trees.cc
 binary_trees_shared_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS) $(NO_BUILTIN_CXXFLAGS)
 binary_trees_shared_LDFLAGS = $(PTHREAD_CFLAGS) $(TCMALLOC_FLAGS)
 binary_trees_shared_LDADD = libtcmalloc_minimal.la $(PTHREAD_LIBS)
+
+noinst_PROGRAMS += id_tree_bench
+id_tree_bench_SOURCES = benchmark/id_tree_bench.cc
+id_tree_bench_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS) $(NO_BUILTIN_CXXFLAGS)
+id_tree_bench_LDFLAGS = $(PTHREAD_CFLAGS) $(TCMALLOC_FLAGS) -static
+id_tree_bench_LDADD = librun_benchmark.la $(PTHREAD_LIBS)
+
 endif !MINGW
 
 ### ------- tcmalloc (thread-caching malloc + heap profiler + heap checker)
