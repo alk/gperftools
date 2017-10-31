@@ -142,7 +142,7 @@ struct Instruction {
   static constexpr uint64_t kFree   = 1;
 
   uint64_t type:8;
-  uint64_t reg:58;
+  uint64_t reg:56;
   uint64_t size;
   // alignment...
 
@@ -157,6 +157,7 @@ struct Instruction {
     Instruction rv;
     rv.type = kFree;
     rv.reg = reg;
+    rv.size = 0;
     return rv;
   }
 };
