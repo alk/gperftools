@@ -165,10 +165,10 @@ noinst_PROGRAMS =
 
 noinst_PROGRAMS += replay
 
-replay_SOURCES = replay.cc src/varint_codec.cc actual_replay.h actual_replay.cc
+replay_SOURCES = replay.cc src/varint_codec.cc actual_replay.h actual_replay.cc replay.capnp.c++ replay.capnp.h
 replay_LDADD =
 replay_CXXFLAGS = -pthread
-replay_LDFLAGS = -pthread # /usr/local/lib/libtcmalloc_minimal.a
+replay_LDFLAGS = -pthread -lcapnp # /usr/local/lib/libtcmalloc_minimal.a
 
 # Binaries we might build that should be installed
 bin_PROGRAMS =
