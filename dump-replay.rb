@@ -55,7 +55,7 @@ include Replay
 # end
 
 while not STDIN.eof?
-  chunk = Replay::Batch.read_from(STDIN)
+  chunk = Replay::Batch.read_packed_from(STDIN)
   chunk.threads.each do |ti|
     pp ti
   end

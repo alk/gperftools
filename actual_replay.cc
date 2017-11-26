@@ -5,6 +5,12 @@
 #include <capnp/serialize-packed.h>
 #include "replay.capnp.h"
 
+static constexpr int kFirstSegmentSize = 10 << 20;
+
+ReplayDumper::ReplayDumper(const writer_fn_t& writer_fn) : writer_fn_(writer_fn) {
+  first_segment.reset(new uint64_t[(kFirstSegmentSize + 7)/8]);
+}
+
 ReplayDumper::ThreadState* ReplayDumper::find_thread(
     uint64_t thread_id, bool *live_ptr) {
   auto pair = per_thread_instructions_.emplace(
@@ -70,7 +76,7 @@ private:
 };
 
 void ReplayDumper::flush_chunk() {
-  ::capnp::MallocMessageBuilder message;
+  ::capnp::MallocMessageBuilder message(kj::arrayPtr(reinterpret_cast<capnp::word*>(first_segment.get()), kFirstSegmentSize));
   replay::Batch::Builder batch = message.initRoot<replay::Batch>();
   ::capnp::List<replay::ThreadChunk>::Builder threads = batch.initThreads(per_thread_instructions_.size());
 

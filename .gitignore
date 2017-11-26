@@ -144,6 +144,7 @@
 /tcmalloc_unittest
 /tcmalloc_unittest.sh
 /test-driver
+/test_dump
 /thread_dealloc_unittest
 /thread_dealloc_unittest.exe
 /unwind_bench

@@ -1,7 +1,6 @@
 @0xcb49ade5c790d703;
 
-# using Cxx = import "/capnp/c++.capnp";
-# $Cxx.namespace("replay");
+$import "/capnp/c++.capnp".namespace("replay");
 
 struct Instruction {
   enum Type {

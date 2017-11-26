@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <memory>
 
 #define PREDICT_FALSE(cond) __builtin_expect((cond), 0)
 #define PREDICT_TRUE(cond) __builtin_expect((cond), 1)
@@ -173,7 +174,7 @@ public:
       : thread_id(thread_id), live_ptr(live_ptr) {}
   };
   typedef std::function<int (const void *, size_t)> writer_fn_t;
-  ReplayDumper(const writer_fn_t& writer_fn) : writer_fn_(writer_fn) {}
+  ReplayDumper(const writer_fn_t& writer_fn);
 
   ThreadState* find_thread(uint64_t thread_id, bool *live_ptr);
 
@@ -194,6 +195,8 @@ private:
   // maps tok -> register number
   std::unordered_map<uint64_t, uint64_t> allocated_;
   int iteration_size{};
+
+  std::unique_ptr<uint64_t[]> first_segment;
 };
 
 #endif
