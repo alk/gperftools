@@ -315,6 +315,7 @@ const ::capnp::_::RawSchema s_f599a53b0bdaadae = {
 
 // =======================================================================================
 
+namespace replay {
 
 // Instruction
 constexpr uint16_t Instruction::_capnpPrivate::dataWordSize;
@@ -341,4 +342,5 @@ constexpr ::capnp::_::RawSchema const* Batch::_capnpPrivate::schema;
 #endif  // !CAPNP_LITE
 
 
+}  // namespace
 

@@ -681,7 +681,7 @@ int main(int argc, char **argv)
     close(rv);
   }
 
-  ReplayDumper::writer_fn_t replay_writer = +[](void *dummy, size_t size) -> int {
+  ReplayDumper::writer_fn_t replay_writer = +[](const void *dummy, size_t size) -> int {
     return size;
   };
 
@@ -693,7 +693,7 @@ int main(int argc, char **argv)
       perror("fopen");
       abort();
     }
-    replay_writer = [&output_file](void *buffer, size_t size) -> int {
+    replay_writer = [&output_file](const void *buffer, size_t size) -> int {
       fwrite_unlocked(buffer, 1, size, output_file);
       return size;
     };
@@ -704,7 +704,7 @@ int main(int argc, char **argv)
     });
 
   uint64_t replay_writer_written = 0;
-  ReplayDumper::writer_fn_t counting_replay_writer = [&replay_writer, &replay_writer_written](void *buf, size_t size) -> int {
+  ReplayDumper::writer_fn_t counting_replay_writer = [&replay_writer, &replay_writer_written](const void *buf, size_t size) -> int {
     replay_writer_written += size;
     return replay_writer(buf, size);
   };

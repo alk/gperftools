@@ -29,6 +29,7 @@ CAPNP_DECLARE_SCHEMA(f599a53b0bdaadae);
 }  // namespace schemas
 }  // namespace capnp
 
+namespace replay {
 
 struct Instruction {
   Instruction() = delete;
@@ -96,7 +97,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-  inline  ::Instruction::Type getType() const;
+  inline  ::replay::Instruction::Type getType() const;
 
   inline  ::uint32_t getReg() const;
 
@@ -136,8 +137,8 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline  ::Instruction::Type getType();
-  inline void setType( ::Instruction::Type value);
+  inline  ::replay::Instruction::Type getType();
+  inline void setType( ::replay::Instruction::Type value);
 
   inline  ::uint32_t getReg();
   inline void setReg( ::uint32_t value);
@@ -202,7 +203,7 @@ public:
   inline bool getLive() const;
 
   inline bool hasInstructions() const;
-  inline  ::capnp::List< ::Instruction>::Reader getInstructions() const;
+  inline  ::capnp::List< ::replay::Instruction>::Reader getInstructions() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -239,11 +240,11 @@ public:
   inline void setLive(bool value);
 
   inline bool hasInstructions();
-  inline  ::capnp::List< ::Instruction>::Builder getInstructions();
-  inline void setInstructions( ::capnp::List< ::Instruction>::Reader value);
-  inline  ::capnp::List< ::Instruction>::Builder initInstructions(unsigned int size);
-  inline void adoptInstructions(::capnp::Orphan< ::capnp::List< ::Instruction>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::Instruction>> disownInstructions();
+  inline  ::capnp::List< ::replay::Instruction>::Builder getInstructions();
+  inline void setInstructions( ::capnp::List< ::replay::Instruction>::Reader value);
+  inline  ::capnp::List< ::replay::Instruction>::Builder initInstructions(unsigned int size);
+  inline void adoptInstructions(::capnp::Orphan< ::capnp::List< ::replay::Instruction>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::replay::Instruction>> disownInstructions();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -289,7 +290,7 @@ public:
 #endif  // !CAPNP_LITE
 
   inline bool hasThreads() const;
-  inline  ::capnp::List< ::ThreadChunk>::Reader getThreads() const;
+  inline  ::capnp::List< ::replay::ThreadChunk>::Reader getThreads() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -320,11 +321,11 @@ public:
 #endif  // !CAPNP_LITE
 
   inline bool hasThreads();
-  inline  ::capnp::List< ::ThreadChunk>::Builder getThreads();
-  inline void setThreads( ::capnp::List< ::ThreadChunk>::Reader value);
-  inline  ::capnp::List< ::ThreadChunk>::Builder initThreads(unsigned int size);
-  inline void adoptThreads(::capnp::Orphan< ::capnp::List< ::ThreadChunk>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::ThreadChunk>> disownThreads();
+  inline  ::capnp::List< ::replay::ThreadChunk>::Builder getThreads();
+  inline void setThreads( ::capnp::List< ::replay::ThreadChunk>::Reader value);
+  inline  ::capnp::List< ::replay::ThreadChunk>::Builder initThreads(unsigned int size);
+  inline void adoptThreads(::capnp::Orphan< ::capnp::List< ::replay::ThreadChunk>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::replay::ThreadChunk>> disownThreads();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -354,17 +355,17 @@ private:
 
 // =======================================================================================
 
-inline  ::Instruction::Type Instruction::Reader::getType() const {
-  return _reader.getDataField< ::Instruction::Type>(
+inline  ::replay::Instruction::Type Instruction::Reader::getType() const {
+  return _reader.getDataField< ::replay::Instruction::Type>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
 
-inline  ::Instruction::Type Instruction::Builder::getType() {
-  return _builder.getDataField< ::Instruction::Type>(
+inline  ::replay::Instruction::Type Instruction::Builder::getType() {
+  return _builder.getDataField< ::replay::Instruction::Type>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
-inline void Instruction::Builder::setType( ::Instruction::Type value) {
-  _builder.setDataField< ::Instruction::Type>(
+inline void Instruction::Builder::setType( ::replay::Instruction::Type value) {
+  _builder.setDataField< ::replay::Instruction::Type>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
@@ -474,29 +475,29 @@ inline bool ThreadChunk::Builder::hasInstructions() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::Instruction>::Reader ThreadChunk::Reader::getInstructions() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::Instruction>>::get(_reader.getPointerField(
+inline  ::capnp::List< ::replay::Instruction>::Reader ThreadChunk::Reader::getInstructions() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::replay::Instruction>>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::Instruction>::Builder ThreadChunk::Builder::getInstructions() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::Instruction>>::get(_builder.getPointerField(
+inline  ::capnp::List< ::replay::Instruction>::Builder ThreadChunk::Builder::getInstructions() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::replay::Instruction>>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void ThreadChunk::Builder::setInstructions( ::capnp::List< ::Instruction>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::Instruction>>::set(_builder.getPointerField(
+inline void ThreadChunk::Builder::setInstructions( ::capnp::List< ::replay::Instruction>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::replay::Instruction>>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::Instruction>::Builder ThreadChunk::Builder::initInstructions(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::Instruction>>::init(_builder.getPointerField(
+inline  ::capnp::List< ::replay::Instruction>::Builder ThreadChunk::Builder::initInstructions(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::replay::Instruction>>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), size);
 }
 inline void ThreadChunk::Builder::adoptInstructions(
-    ::capnp::Orphan< ::capnp::List< ::Instruction>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::Instruction>>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::capnp::List< ::replay::Instruction>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::replay::Instruction>>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::Instruction>> ThreadChunk::Builder::disownInstructions() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::Instruction>>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::capnp::List< ::replay::Instruction>> ThreadChunk::Builder::disownInstructions() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::replay::Instruction>>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
@@ -508,31 +509,32 @@ inline bool Batch::Builder::hasThreads() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::ThreadChunk>::Reader Batch::Reader::getThreads() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::ThreadChunk>>::get(_reader.getPointerField(
+inline  ::capnp::List< ::replay::ThreadChunk>::Reader Batch::Reader::getThreads() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::replay::ThreadChunk>>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::ThreadChunk>::Builder Batch::Builder::getThreads() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::ThreadChunk>>::get(_builder.getPointerField(
+inline  ::capnp::List< ::replay::ThreadChunk>::Builder Batch::Builder::getThreads() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::replay::ThreadChunk>>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void Batch::Builder::setThreads( ::capnp::List< ::ThreadChunk>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::ThreadChunk>>::set(_builder.getPointerField(
+inline void Batch::Builder::setThreads( ::capnp::List< ::replay::ThreadChunk>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::replay::ThreadChunk>>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::ThreadChunk>::Builder Batch::Builder::initThreads(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::ThreadChunk>>::init(_builder.getPointerField(
+inline  ::capnp::List< ::replay::ThreadChunk>::Builder Batch::Builder::initThreads(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::replay::ThreadChunk>>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), size);
 }
 inline void Batch::Builder::adoptThreads(
-    ::capnp::Orphan< ::capnp::List< ::ThreadChunk>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::ThreadChunk>>::adopt(_builder.getPointerField(
+    ::capnp::Orphan< ::capnp::List< ::replay::ThreadChunk>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::replay::ThreadChunk>>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::ThreadChunk>> Batch::Builder::disownThreads() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::ThreadChunk>>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::capnp::List< ::replay::ThreadChunk>> Batch::Builder::disownThreads() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::replay::ThreadChunk>>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
+}  // namespace
 
 #endif  // CAPNP_INCLUDED_cb49ade5c790d703_

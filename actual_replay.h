@@ -172,7 +172,7 @@ public:
     ThreadState(uint64_t thread_id, bool* live_ptr)
       : thread_id(thread_id), live_ptr(live_ptr) {}
   };
-  typedef std::function<int (void *, size_t)> writer_fn_t;
+  typedef std::function<int (const void *, size_t)> writer_fn_t;
   ReplayDumper(const writer_fn_t& writer_fn) : writer_fn_(writer_fn) {}
 
   ThreadState* find_thread(uint64_t thread_id, bool *live_ptr);

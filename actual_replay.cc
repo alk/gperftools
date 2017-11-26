@@ -57,12 +57,12 @@ struct ThreadInfo {
   uint32_t instructions_count;
 };
 
-class FunctionOutputStream : ::kj::OutputStream {
+class FunctionOutputStream : public ::kj::OutputStream {
 public:
   FunctionOutputStream(const ReplayDumper::writer_fn_t& writer) : writer_(writer) {}
   ~FunctionOutputStream() = default;
 
-  virtual override void write(const void* buffer, size_t size) {
+  virtual void write(const void* buffer, size_t size) {
     writer_(buffer, size);
   }
 private:
@@ -71,8 +71,8 @@ private:
 
 void ReplayDumper::flush_chunk() {
   ::capnp::MallocMessageBuilder message;
-  Batch::Builder batch = message.initRoot<Batch>();
-  ::capnp::List<ThreadChunk>::Builder threads = batch.initThreads(per_thread_instructions_.size());
+  replay::Batch::Builder batch = message.initRoot<replay::Batch>();
+  ::capnp::List<replay::ThreadChunk>::Builder threads = batch.initThreads(per_thread_instructions_.size());
 
   int idx = 0;
   for (auto &pair : per_thread_instructions_) {
@@ -81,23 +81,16 @@ void ReplayDumper::flush_chunk() {
     assert(state.thread_id == thread_id);
     auto live = *(state.live_ptr);
 
-    ThreadChunk::Builder tinfo = threads[idx++];
+    replay::ThreadChunk::Builder tinfo = threads[idx++];
 
     tinfo.setThreadID(thread_id);
     tinfo.setLive(live);
-    ::capnp::List<Instruction>::Builder instructions = tinfo.initInstructions(state.instructions.size());
-
-    // ThreadInfo tinfo;
-    // tinfo.thread_id = thread_id;
-    // tinfo.live = live;
-    // tinfo.instructions_count = state.instructions.size();
-
-    // writer_fn_(&tinfo, sizeof(tinfo));
+    ::capnp::List<replay::Instruction>::Builder instructions = tinfo.initInstructions(state.instructions.size());
 
     int instruction_idx = 0;
     for (auto &instr : state.instructions) {
       auto builder = instructions[instruction_idx++];
-      builder.setType(instr.type);
+      builder.setType(static_cast<replay::Instruction::Type>(instr.type));
       builder.setReg(instr.reg);
       builder.setSize(instr.size);
     }
@@ -115,34 +108,3 @@ void ReplayDumper::flush_chunk() {
   per_thread_instructions_.clear();
   iteration_size = 0;
 }
-
-// void ReplayDumper::flush_chunk() {
-//   ChunkInfo info;
-//   info.thread_count = per_thread_instructions_.size();
-//   writer_fn_(&info, sizeof(info));
-
-//   for (auto &pair : per_thread_instructions_) {
-//     auto thread_id = pair.first;
-//     auto &state = pair.second;
-//     assert(state.thread_id == thread_id);
-//     auto live = *(state.live_ptr);
-
-//     ThreadInfo tinfo;
-//     tinfo.thread_id = thread_id;
-//     tinfo.live = live;
-//     tinfo.instructions_count = state.instructions.size();
-
-//     writer_fn_(&tinfo, sizeof(tinfo));
-
-//     for (auto &instr : state.instructions) {
-//       writer_fn_(&instr, sizeof(instr));
-//     }
-//   }
-
-//   for (auto reg : freed_this_iteration_) {
-//     ids_space_.free_id(reg);
-//   }
-
-//   per_thread_instructions_.clear();
-//   iteration_size = 0;
-// }
