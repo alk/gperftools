@@ -218,18 +218,6 @@ extern "C" PERFTOOLS_DLL_DECL void* tc_realloc(void* old_ptr, size_t new_size) P
   return meta + 2;
 }
 
-ATTRIBUTE_SECTION(google_malloc)
-void* cpp_throw_oom(size_t size) {
-  return handle_oom(retry_malloc, reinterpret_cast<void *>(size),
-                    true, false);
-}
-
-ATTRIBUTE_SECTION(google_malloc)
-void* cpp_nothrow_oom(size_t size) {
-  return handle_oom(retry_malloc, reinterpret_cast<void *>(size),
-                    true, true);
-}
-
 extern "C" PERFTOOLS_DLL_DECL void* tc_new(size_t size) {
   size_t new_size = tracing_adjust_size(size);
   void* p = do_malloc(new_size);
@@ -287,12 +275,17 @@ extern "C" PERFTOOLS_DLL_DECL void tc_deletearray_nothrow(void* p, const std::no
   tc_delete(p);
 }
 
-static inline ATTRIBUTE_ALWAYS_INLINE void* do_tracing_memalign(size_t align, size_t size) {
+static inline ATTRIBUTE_ALWAYS_INLINE void* do_tracing_memalign_inner(size_t align, size_t size) {
   size_t extra = (align < 16) ? 16 : align;
   if (size + extra < size) {
     return NULL;
   }
-  void* p = do_memalign_or_cpp_memalign(align, size + extra);
+  void *p;
+  if (align > kPageSize) {
+    p = do_memalign_pages(align, size + extra);
+  } else {
+    p = do_malloc(align_size_up(size + extra, align));
+  }
   if (PREDICT_TRUE(p != NULL)) {
     uint64_t tok = MallocTracer::GetInstance()->TraceMalloc(size);
     uint64_t *meta = static_cast<uint64_t *>(p) + (extra - 16) / 8;
@@ -303,10 +296,46 @@ static inline ATTRIBUTE_ALWAYS_INLINE void* do_tracing_memalign(size_t align, si
   return p;
 }
 
-extern "C" PERFTOOLS_DLL_DECL void* tc_memalign(size_t align, size_t size) PERFTOOLS_NOTHROW {
-  void *p = do_tracing_memalign(align, size);
+struct memalign_retry_data {
+  size_t align;
+  size_t size;
+};
+
+static void *retry_tracing_memalign(void *arg) {
+  memalign_retry_data *data = static_cast<memalign_retry_data *>(arg);
+  return do_tracing_memalign_inner(data->align, data->size);
+}
+
+static void* handle_oom_malloc(malloc_fn retry_fn,
+                               void* retry_arg) {
+  return handle_oom(retry_fn, retry_arg, false, true);
+}
+
+static void* handle_oom_cpp_throw(malloc_fn retry_fn,
+                                  void* retry_arg) {
+  return handle_oom(retry_fn, retry_arg, true, false);
+}
+static void* handle_oom_cpp_nothrow(malloc_fn retry_fn,
+                                    void* retry_arg) {
+  return handle_oom(retry_fn, retry_arg, true, true);
+}
+
+static inline ATTRIBUTE_ALWAYS_INLINE
+void* do_tracing_memalign(size_t align, size_t size,
+                          void *(*oom_handler)(malloc_fn, void*)) {
+  void *p = do_tracing_memalign_inner(align, size);
+  if (PREDICT_FALSE(p == NULL)) {
+    memalign_retry_data retry_data;
+    retry_data.align = align;
+    retry_data.size = size;
+    p = oom_handler(retry_tracing_memalign, &retry_data);
+  }
   MallocHook::InvokeNewHook(p, size);
   return p;
+}
+
+extern "C" PERFTOOLS_DLL_DECL void* tc_memalign(size_t align, size_t size) PERFTOOLS_NOTHROW {
+  return do_tracing_memalign(align, size, handle_oom_malloc);
 }
 
 // Implementation taken from tcmalloc/tcmalloc.cc
@@ -318,7 +347,7 @@ extern "C" PERFTOOLS_DLL_DECL int tc_posix_memalign(void** result_ptr, size_t al
     return EINVAL;
   }
 
-  void* result = do_tracing_memalign(align, size);
+  void* result = tc_memalign(align, size);
   MallocHook::InvokeNewHook(result, size);
   if (result == NULL) {
     return ENOMEM;
@@ -329,10 +358,7 @@ extern "C" PERFTOOLS_DLL_DECL int tc_posix_memalign(void** result_ptr, size_t al
 }
 
 extern "C" PERFTOOLS_DLL_DECL void* tc_valloc(size_t size) PERFTOOLS_NOTHROW {
-  // Allocate >= size bytes starting on a page boundary
-  void *p = do_tracing_memalign(getpagesize(), size);
-  MallocHook::InvokeNewHook(p, size);
-  return p;
+  return tc_memalign(getpagesize(), size);
 }
 
 extern "C" PERFTOOLS_DLL_DECL void* tc_pvalloc(size_t size) PERFTOOLS_NOTHROW {
@@ -343,9 +369,7 @@ extern "C" PERFTOOLS_DLL_DECL void* tc_pvalloc(size_t size) PERFTOOLS_NOTHROW {
   if (size == 0) {     // pvalloc(0) should allocate one page, according to
     size = pagesize;   // http://man.free4web.biz/man3/libmpatrol.3.html
   }
-  void *p = do_tracing_memalign(pagesize, size);
-  MallocHook::InvokeNewHook(p, size);
-  return p;
+  return tc_memalign(pagesize, size);
 }
 
 // malloc_stats just falls through to the base implementation.
@@ -372,3 +396,77 @@ extern "C" PERFTOOLS_DLL_DECL void* tc_malloc_skip_new_handler(size_t size) PERF
   MallocHook::InvokeNewHook(result, size);
   return result;
 }
+
+#if defined(ENABLE_ALIGNED_NEW_DELETE)
+
+extern "C" PERFTOOLS_DLL_DECL void* tc_new_aligned(size_t size, std::align_val_t align) {
+  return do_tracing_memalign(static_cast<size_t>(align), size, handle_oom_cpp_throw);
+}
+
+extern "C" PERFTOOLS_DLL_DECL void* tc_newarray_aligned(size_t size, std::align_val_t align) {
+  return do_tracing_memalign(static_cast<size_t>(align), size, handle_oom_cpp_throw);
+}
+
+extern "C" PERFTOOLS_DLL_DECL void* tc_new_aligned_nothrow(size_t size, std::align_val_t align, const std::nothrow_t&) PERFTOOLS_NOTHROW {
+  return do_tracing_memalign(static_cast<size_t>(align), size, handle_oom_cpp_nothrow);
+}
+
+extern "C" PERFTOOLS_DLL_DECL void* tc_newarray_aligned_nothrow(size_t size, std::align_val_t align, const std::nothrow_t& nt) PERFTOOLS_NOTHROW {
+  return do_tracing_memalign(static_cast<size_t>(align), size, handle_oom_cpp_nothrow);
+}
+
+extern "C" PERFTOOLS_DLL_DECL void tc_delete_aligned(void* p, std::align_val_t) PERFTOOLS_NOTHROW
+#ifdef TC_ALIAS
+  TC_ALIAS(tc_delete);
+#else
+{
+  tc_delete(p);
+}
+#endif
+
+extern "C" PERFTOOLS_DLL_DECL void tc_delete_sized_aligned(void* p, size_t size, std::align_val_t align) PERFTOOLS_NOTHROW
+#ifdef TC_ALIAS
+  TC_ALIAS(tc_delete);
+#else
+{
+  tc_delete(p);
+}
+#endif
+
+extern "C" PERFTOOLS_DLL_DECL void tc_delete_aligned_nothrow(void* p, std::align_val_t, const std::nothrow_t&) PERFTOOLS_NOTHROW
+#ifdef TC_ALIAS
+  TC_ALIAS(tc_delete);
+#else
+{
+  tc_delete(p);
+}
+#endif
+
+extern "C" PERFTOOLS_DLL_DECL void tc_deletearray_aligned(void* p, std::align_val_t) PERFTOOLS_NOTHROW
+#ifdef TC_ALIAS
+  TC_ALIAS(tc_delete);
+#else
+{
+  tc_delete(p);
+}
+#endif
+
+extern "C" PERFTOOLS_DLL_DECL void tc_deletearray_sized_aligned(void* p, size_t size, std::align_val_t align) PERFTOOLS_NOTHROW
+#ifdef TC_ALIAS
+  TC_ALIAS(tc_delete);
+#else
+{
+  tc_delete(p);
+}
+#endif
+
+extern "C" PERFTOOLS_DLL_DECL void tc_deletearray_aligned_nothrow(void* p, std::align_val_t, const std::nothrow_t&) PERFTOOLS_NOTHROW
+#ifdef TC_ALIAS
+  TC_ALIAS(tc_delete);
+#else
+{
+  tc_delete(p);
+}
+#endif
+
+#endif // defined(ENABLE_ALIGNED_NEW_DELETE)
