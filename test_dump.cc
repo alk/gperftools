@@ -5,11 +5,13 @@
 #include <malloc.h>
 #include <assert.h>
 
+#include <sys/time.h>
 #include <sched.h>
 
 #include <atomic>
 #include <vector>
 #include <thread>
+#include <future>
 
 #include <capnp/message.h>
 #include <capnp/serialize-packed.h>
@@ -30,14 +32,26 @@ static unsigned char buffer_space[128 << 10] __attribute__((aligned(4096)));
 
 static uintptr_t registers[1024 << 10];
 
+static constexpr int kSpins = 1024;
+
 static void *read_register(int reg) {
   uintptr_t rv = registers[reg];
 
   if (PREDICT_FALSE(rv == 0)) {
     std::atomic<uintptr_t>* place = reinterpret_cast<std::atomic<uintptr_t>*>(registers + reg);
+    for (int i = 0; i < kSpins; i++) {
+      rv = place->load(std::memory_order_seq_cst);
+      if (rv != 0) {
+        return reinterpret_cast<void *>(rv);
+      }
+
+#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
+  __asm__ __volatile__("rep; nop" : : );
+#endif
+    }
     do {
       sched_yield();
-    } while (place->load(std::memory_order_seq_cst) == 0);
+    } while ((rv = place->load(std::memory_order_seq_cst)) == 0);
   }
 
   return reinterpret_cast<void *>(rv);
@@ -53,7 +67,12 @@ static void replay_instructions(const ::capnp::List<::replay::Instruction>::Read
     auto reg = instr.getReg();
     switch (instr.getType()) {
     case replay::Instruction::Type::MALLOC: {
-      assert(registers[reg] == 0);
+      // 312824
+
+      // if (registers[reg] != 0) {
+      //   asm volatile ("int $3");
+      // }
+      // assert(registers[reg] == 0);
       auto ptr = malloc(instr.getSize());
       if (ptr == nullptr) {
         abort();
@@ -90,16 +109,32 @@ static void replay_instructions(const ::capnp::List<::replay::Instruction>::Read
   }
 }
 
+uint64_t nanos() {
+  struct timeval tv;
+  int rv = gettimeofday(&tv, nullptr);
+  if (rv != 0) {
+    perror("gettimeofday");
+    abort();
+  }
+  return (tv.tv_usec + uint64_t{1000000} * tv.tv_sec) * uint64_t{1000};
+}
+
 int main() {
   ::kj::FdInputStream fd0(0);
   ::kj::BufferedInputStreamWrapper input(fd0,
                                          kj::arrayPtr(buffer_space, sizeof(buffer_space)));
 
+  uint64_t nanos_start = nanos();
+  uint64_t printed_instructions = 0;
+  uint64_t total_instructions = 0;
+
   while (input.tryGetReadBuffer() != nullptr) {
-    ::capnp::InputStreamMessageReader message(input);
+    ::capnp::PackedMessageReader message(input);
+    // ::capnp::InputStreamMessageReader message(input);
     auto batch = message.getRoot<replay::Batch>();
 
     std::vector<std::thread> threads;
+    // std::vector<std::future<void>> futures;
 
     auto threadsList = batch.getThreads();
 
@@ -110,19 +145,39 @@ int main() {
     for (auto iter = threadsList.begin() + 1; iter != threadsListEnd; ++iter) {
       auto threadInfo = *iter;
       // printf("thread: %lld\n", (long long)threadInfo.getThreadID());
-      threads.emplace_back(std::thread([threadInfo] () {
-          replay_instructions(threadInfo.getInstructions());
-          }));
+      auto instructions = threadInfo.getInstructions();
+      total_instructions += instructions.size();
+      threads.emplace_back(std::thread(replay_instructions, instructions));
+
+      // auto h = std::async(std::launch::async,
+      //                     [threadInfo] () {
+      //                       replay_instructions(threadInfo.getInstructions());
+      //                     });
+      // futures.emplace_back(std::move(h));
     }
 
     {
       auto threadInfo = *(threadsList.begin());
+      auto instructions = threadInfo.getInstructions();
+      total_instructions += instructions.size();
       // printf("1thread: %lld\n", (long long)threadInfo.getThreadID());
-      replay_instructions(threadInfo.getInstructions());
+      replay_instructions(instructions);
     }
 
     for (auto &t : threads) {
       t.join();
+    }
+
+    // for (auto &f : futures) {
+    //   f.get();
+    // }
+
+    if (total_instructions - printed_instructions > (4 << 20)) {
+      uint64_t total_nanos = nanos() - nanos_start;
+      printed_instructions = total_instructions;
+      printf("total_instructions = %lld\nrate = %f instr/sec\n",
+             (long long)total_instructions,
+             (double)total_instructions * 1E9 / total_nanos);
     }
 
     // printf("end of batch!\n\n\n");

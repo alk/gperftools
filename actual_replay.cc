@@ -127,7 +127,7 @@ void ReplayDumper::flush_chunk() {
 
   {
     FunctionOutputStream os(writer_fn_);
-    ::capnp::writeMessage(os, message);
+    ::capnp::writePackedMessage(os, message);
   }
 
   for (auto reg : freed_this_iteration_) {
