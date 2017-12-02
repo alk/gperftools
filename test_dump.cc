@@ -134,7 +134,6 @@ int main() {
     auto batch = message.getRoot<replay::Batch>();
 
     std::vector<std::thread> threads;
-    // std::vector<std::future<void>> futures;
 
     auto threadsList = batch.getThreads();
 
@@ -148,12 +147,6 @@ int main() {
       auto instructions = threadInfo.getInstructions();
       total_instructions += instructions.size();
       threads.emplace_back(std::thread(replay_instructions, instructions));
-
-      // auto h = std::async(std::launch::async,
-      //                     [threadInfo] () {
-      //                       replay_instructions(threadInfo.getInstructions());
-      //                     });
-      // futures.emplace_back(std::move(h));
     }
 
     {
@@ -167,10 +160,6 @@ int main() {
     for (auto &t : threads) {
       t.join();
     }
-
-    // for (auto &f : futures) {
-    //   f.get();
-    // }
 
     if (total_instructions - printed_instructions > (4 << 20)) {
       uint64_t total_nanos = nanos() - nanos_start;
