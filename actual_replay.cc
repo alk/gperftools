@@ -9,6 +9,7 @@ static constexpr int kFirstSegmentSize = 10 << 20;
 
 ReplayDumper::ReplayDumper(const writer_fn_t& writer_fn) : writer_fn_(writer_fn) {
   first_segment.reset(new uint64_t[(kFirstSegmentSize + 7)/8]);
+  memset(first_segment.get(), 0, kFirstSegmentSize);
 }
 
 ReplayDumper::ThreadState* ReplayDumper::find_thread(
@@ -37,6 +38,13 @@ void ReplayDumper::record_malloc(
   allocated_[tok] = reg;
   state->instructions.push_back(Instruction::Malloc(reg, size));
 
+  // if (allocated_this_iteration.size() <= reg) {
+  //   allocated_this_iteration.resize(reg);
+  // }
+
+  // assert(allocated_this_iteration[reg] == false);
+  // allocated_this_iteration[reg] = true;
+
   after_record();
 }
 
@@ -49,6 +57,21 @@ void ReplayDumper::record_free(
   freed_this_iteration_.insert(reg);
 
   state->instructions.push_back(Instruction::Free(reg));
+
+  after_record();
+}
+
+void ReplayDumper::record_realloc(
+  ThreadState* state, uint64_t tok, uint64_t timestamp,
+  uint64_t new_tok, uint64_t new_size) {
+
+  assert(allocated_.count(tok) == 1);
+
+  auto reg = allocated_[tok];
+  allocated_[new_tok] = reg;
+  allocated_.erase(tok);
+
+  state->instructions.push_back(Instruction::Realloc(reg, new_size));
 
   after_record();
 }
@@ -104,13 +127,15 @@ void ReplayDumper::flush_chunk() {
 
   {
     FunctionOutputStream os(writer_fn_);
-    ::capnp::writePackedMessage(os, message);
+    ::capnp::writeMessage(os, message);
   }
 
   for (auto reg : freed_this_iteration_) {
     ids_space_.free_id(reg);
   }
 
+  freed_this_iteration_.clear();
   per_thread_instructions_.clear();
+  // std::fill(allocated_this_iteration.begin(), allocated_this_iteration.end(), false);
   iteration_size = 0;
 }

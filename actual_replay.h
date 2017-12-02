@@ -88,9 +88,9 @@ inline uint64_t IdTree::allocate_id() {
     size_t sz = level3.size();
     pos = sz * 64;
     assert(level2.size() == sz * 64);
-    sz /= 64;
+    sz *= 64;
     assert(level1.size() == sz * 64);
-    sz /= 64;
+    sz *= 64;
     assert(level0.size() == sz * 64);
     level3.push_back(~0ULL);
   }
@@ -101,7 +101,7 @@ inline uint64_t IdTree::allocate_id() {
     assert(sz == pos);
     pos2 = sz * 64;
     assert(level1.size() == sz * 64);
-    sz /= 64;
+    sz *= 64;
     assert(level0.size() == sz * 64);
     level2.push_back(~0ULL);
   } else {
@@ -141,6 +141,7 @@ inline void IdTree::free_id(uint64_t id) {
 struct Instruction {
   static constexpr uint64_t kMalloc = 0;
   static constexpr uint64_t kFree   = 1;
+  static constexpr uint64_t kRealloc = 2;
 
   uint64_t type:8;
   uint64_t reg:56;
@@ -152,6 +153,13 @@ struct Instruction {
     rv.type = kMalloc;
     rv.reg = reg;
     rv.size = size;
+    return rv;
+  }
+  static Instruction Realloc(int reg, uint64_t new_size) {
+    Instruction rv;
+    rv.type = kRealloc;
+    rv.reg = reg;
+    rv.size = new_size;
     return rv;
   }
   static Instruction Free(int reg) {
@@ -183,6 +191,9 @@ public:
 
   void record_free(ThreadState* state, uint64_t tok, uint64_t timestamp);
 
+  void record_realloc(ThreadState* state, uint64_t old_tok, uint64_t timestamp,
+                      uint64_t new_tok, uint64_t new_size);
+
   void flush_chunk();
 
 private:
@@ -190,6 +201,7 @@ private:
 
   writer_fn_t writer_fn_;
   IdTree ids_space_;
+  // std::vector<bool> allocated_this_iteration;
   std::unordered_map<uint64_t, ThreadState> per_thread_instructions_;
   std::unordered_set<uint64_t> freed_this_iteration_;
   // maps tok -> register number

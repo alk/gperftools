@@ -12,10 +12,10 @@ struct Instruction {
 
   type @0 :Type;
   reg @1 :UInt32;
-  ts @2 :UInt64;
-  cpu @3 :UInt64;
-  size @4 :UInt64;
-  alignment @5 :UInt64;
+  size @2 :UInt64;
+  alignment @3 :UInt64;
+  # ts @4 :UInt64;
+  # cpu @5 :UInt64;
 }
 
 struct ThreadChunk {

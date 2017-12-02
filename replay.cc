@@ -443,8 +443,7 @@ struct ReplayMachine {
       dumper_.record_malloc(dst, ev.memalign.token, ev.memalign.size, ev.ts);
       break;
     case EventsEncoder::kEventRealloc:
-      dumper_.record_free(dst, ev.realloc.old_token, ev.ts);
-      dumper_.record_malloc(dst, ev.realloc.new_token, ev.realloc.new_size, ev.ts);
+      dumper_.record_realloc(dst, ev.realloc.old_token, ev.ts, ev.realloc.new_token, ev.realloc.new_size);
       break;
     }
   }

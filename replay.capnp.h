@@ -41,7 +41,7 @@ struct Instruction {
 
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(e1db17f6470d97a8, 5, 0)
+    CAPNP_DECLARE_STRUCT_HEADER(e1db17f6470d97a8, 3, 0)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -101,10 +101,6 @@ public:
 
   inline  ::uint32_t getReg() const;
 
-  inline  ::uint64_t getTs() const;
-
-  inline  ::uint64_t getCpu() const;
-
   inline  ::uint64_t getSize() const;
 
   inline  ::uint64_t getAlignment() const;
@@ -142,12 +138,6 @@ public:
 
   inline  ::uint32_t getReg();
   inline void setReg( ::uint32_t value);
-
-  inline  ::uint64_t getTs();
-  inline void setTs( ::uint64_t value);
-
-  inline  ::uint64_t getCpu();
-  inline void setCpu( ::uint64_t value);
 
   inline  ::uint64_t getSize();
   inline void setSize( ::uint64_t value);
@@ -383,60 +373,32 @@ inline void Instruction::Builder::setReg( ::uint32_t value) {
       ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
 }
 
-inline  ::uint64_t Instruction::Reader::getTs() const {
-  return _reader.getDataField< ::uint64_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
-}
-
-inline  ::uint64_t Instruction::Builder::getTs() {
-  return _builder.getDataField< ::uint64_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
-}
-inline void Instruction::Builder::setTs( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
-      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
-}
-
-inline  ::uint64_t Instruction::Reader::getCpu() const {
-  return _reader.getDataField< ::uint64_t>(
-      ::capnp::bounded<2>() * ::capnp::ELEMENTS);
-}
-
-inline  ::uint64_t Instruction::Builder::getCpu() {
-  return _builder.getDataField< ::uint64_t>(
-      ::capnp::bounded<2>() * ::capnp::ELEMENTS);
-}
-inline void Instruction::Builder::setCpu( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
-      ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
-}
-
 inline  ::uint64_t Instruction::Reader::getSize() const {
   return _reader.getDataField< ::uint64_t>(
-      ::capnp::bounded<3>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
 
 inline  ::uint64_t Instruction::Builder::getSize() {
   return _builder.getDataField< ::uint64_t>(
-      ::capnp::bounded<3>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
 inline void Instruction::Builder::setSize( ::uint64_t value) {
   _builder.setDataField< ::uint64_t>(
-      ::capnp::bounded<3>() * ::capnp::ELEMENTS, value);
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint64_t Instruction::Reader::getAlignment() const {
   return _reader.getDataField< ::uint64_t>(
-      ::capnp::bounded<4>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS);
 }
 
 inline  ::uint64_t Instruction::Builder::getAlignment() {
   return _builder.getDataField< ::uint64_t>(
-      ::capnp::bounded<4>() * ::capnp::ELEMENTS);
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS);
 }
 inline void Instruction::Builder::setAlignment( ::uint64_t value) {
   _builder.setDataField< ::uint64_t>(
-      ::capnp::bounded<4>() * ::capnp::ELEMENTS, value);
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint64_t ThreadChunk::Reader::getThreadID() const {
