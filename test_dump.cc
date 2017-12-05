@@ -72,7 +72,7 @@ static void replay_instructions(const ::capnp::List<::replay::Instruction>::Read
       // if (registers[reg] != 0) {
       //   asm volatile ("int $3");
       // }
-      // assert(registers[reg] == 0);
+      assert(registers[reg] == 0);
       auto ptr = malloc(instr.getSize());
       if (ptr == nullptr) {
         abort();
@@ -121,8 +121,9 @@ uint64_t nanos() {
 
 int main() {
   ::kj::FdInputStream fd0(0);
-  ::kj::BufferedInputStreamWrapper input(fd0,
-                                         kj::arrayPtr(buffer_space, sizeof(buffer_space)));
+  ::kj::BufferedInputStreamWrapper input(
+    fd0,
+    kj::arrayPtr(buffer_space, sizeof(buffer_space)));
 
   uint64_t nanos_start = nanos();
   uint64_t printed_instructions = 0;
