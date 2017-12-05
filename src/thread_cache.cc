@@ -423,10 +423,25 @@ ThreadCache* ThreadCache::NewHeap(pthread_t tid) {
 }
 
 void ThreadCache::BecomeIdle() {
-  if (!tsd_inited_) return;              // No caches yet
-  ThreadCache* heap = GetThreadHeap();
+  ThreadCache* heap = ReleaseCurrentCache();
   if (heap == NULL) return;             // No thread cache to remove
-  if (heap->in_setspecific_) return;    // Do not disturb the active caller
+
+  // We can now get rid of the heap
+  DeleteCache(heap);
+}
+
+void ThreadCache::BecomeTemporarilyIdle() {
+  ThreadCache* heap = GetCacheIfPresent();
+  if (heap)
+    heap->Cleanup();
+}
+
+ThreadCache* ThreadCache::ReleaseCurrentCache() {
+  if (!tsd_inited_) return NULL;              // No caches yet
+  ThreadCache* heap = GetThreadHeap();
+  if (heap == NULL || heap->in_setspecific_) {
+    return NULL;             // No thread cache to remove
+  }
 
   heap->in_setspecific_ = true;
   perftools_pthread_setspecific(heap_key_, NULL);
@@ -439,17 +454,45 @@ void ThreadCache::BecomeIdle() {
   if (GetThreadHeap() == heap) {
     // Somehow heap got reinstated by a recursive call to malloc
     // from pthread_setspecific.  We give up in this case.
+    return NULL;
+  }
+
+#ifndef HAVE_TLS
+  memset(heap->tid_, 0, sizeof(heap->tid_));
+#endif
+
+  return heap;
+}
+
+void ThreadCache::SetThreadCache(ThreadCache* heap) {
+  ASSERT(tsd_inited_);
+
+  ThreadCache* old = ReleaseCurrentCache();
+  if (old != NULL) {
+    DeleteCache(old);
+  }
+
+  if (heap == NULL) {
     return;
   }
 
-  // We can now get rid of the heap
-  DeleteCache(heap);
-}
+#ifdef HAVE_TLS
+  threadlocal_data_.heap = heap;
+  threadlocal_data_.fast_path_heap = heap;
+#else
+  {
+    SpinLockHolder h(Static::pageheap_lock());
+    heap->tid_ = pthread_self();
+  }
+#endif
 
-void ThreadCache::BecomeTemporarilyIdle() {
-  ThreadCache* heap = GetCacheIfPresent();
-  if (heap)
-    heap->Cleanup();
+  heap->in_setspecific_ = true;
+  // NOTE: there is chance it'll recurse into malloc. For non-have-tls
+  // case we've set heap->tid_ so that we'll find it. For have-tls
+  // case we've already set up both fast-path and regular pointer, so
+  // it won't try to re-create empty heap.
+  perftools_pthread_setspecific(heap_key_, heap);
+  heap->in_setspecific_ = false;
 }
 
 void ThreadCache::DestroyThreadCache(void* ptr) {

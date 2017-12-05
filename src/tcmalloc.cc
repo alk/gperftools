@@ -1006,6 +1006,20 @@ class TCMallocImplementation : public MallocExtension {
   }
 };
 
+extern "C" PERFTOOLS_DLL_DECL
+bool release_malloc_thread_cache(ThreadCacheState** place_state_here) {
+  ThreadCache* cache = ThreadCache::ReleaseCurrentCache();
+  *place_state_here = reinterpret_cast<ThreadCacheState*>(cache);
+  return true;
+}
+
+extern "C" PERFTOOLS_DLL_DECL
+bool set_malloc_thread_cache(ThreadCacheState* state) {
+  ThreadCache* cache = reinterpret_cast<ThreadCache*>(state);
+  ThreadCache::SetThreadCache(cache);
+  return true;
+}
+
 static inline ATTRIBUTE_ALWAYS_INLINE
 size_t align_size_up(size_t size, size_t align) {
   ASSERT(align <= kPageSize);

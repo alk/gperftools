@@ -112,6 +112,9 @@ class ThreadCache {
   static void         ResetUseEmergencyMalloc();
   static bool         IsUseEmergencyMalloc();
 
+  static ThreadCache* ReleaseCurrentCache();
+  static void         SetThreadCache(ThreadCache* cache);
+
   // Return the number of thread heaps in use.
   static inline int HeapsInUse();
 

@@ -406,6 +406,13 @@ class PERFTOOLS_DLL_DECL MallocExtension {
   virtual void MarkThreadTemporarilyIdle();
 };
 
+struct ThreadCacheState;
+
+extern "C" {
+  PERFTOOLS_DLL_DECL bool release_malloc_thread_cache(ThreadCacheState** place_state_here);
+  PERFTOOLS_DLL_DECL bool set_malloc_thread_cache(ThreadCacheState* state);
+}
+
 namespace base {
 
 // Information passed per range.  More fields may be added later.
