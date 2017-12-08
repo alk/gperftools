@@ -179,8 +179,8 @@ private:
   char *buf_ptr;
   char *buf_end;
   char *signal_saved_buf_ptr;
-  char buf_storage[768+128+8+64];
-  // sizeof(MallocTracer) == 1024
+  char buf_storage[3072+768+128+8+64];
+  // sizeof(MallocTracer) == 4024
 
   int destroy_count;
 

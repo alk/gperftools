@@ -56,7 +56,7 @@
 #include "base/googleinit.h"
 #include "malloc_tracer.h"
 
-static const int kDumperPeriodMicros = 2000;
+static const int kDumperPeriodMicros = 3000;
 
 static SpinLock lock(base::LINKER_INITIALIZED);
 static SpinLock signal_lock(base::LINKER_INITIALIZED);
@@ -65,7 +65,7 @@ static const int dump_signal = std::max(std::min(0x35, SIGRTMAX), SIGRTMIN);
 
 static int fd;
 
-static const int kTokenSize = 1 << 10;
+static const int kTokenSize = 4 << 10;
 static const int kTSShift = 10;
 static const uint64_t kTSMask = ~((1ULL << kTSShift) - 1);
 
