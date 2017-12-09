@@ -83,6 +83,25 @@ public:
     SetBufPtr(VarintCodec::encode_unsigned(buf_ptr, to_encode));
   }
 
+  ATTRIBUTE_ALWAYS_INLINE
+  void TraceFreeSized(uint64_t token, size_t size) {
+    EventsEncoder::pair p =
+      EventsEncoder::encode_free_sized(token, size,
+                                       &prev_token, &prev_size);
+
+    if (buf_ptr + 10 >= buf_end) {
+      RefreshBuffer(2, p.first, p.second);
+      return;
+    }
+
+    char *wp = buf_ptr;
+
+    wp = VarintCodec::encode_unsigned(wp, p.first);
+    wp = VarintCodec::encode_unsigned(wp, p.second);
+
+    SetBufPtr(wp);
+  }
+
   uint64_t TraceRealloc(uint64_t old_token, size_t new_size) {
     EventsEncoder::pair p =
       EventsEncoder::encode_realloc(old_token, new_size,

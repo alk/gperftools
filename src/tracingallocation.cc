@@ -137,6 +137,17 @@ static inline ATTRIBUTE_ALWAYS_INLINE void trace_free(void *ptr) {
   do_free(reinterpret_cast<char *>(meta) - off);
 }
 
+static inline ATTRIBUTE_ALWAYS_INLINE void trace_free_sized(void *ptr, size_t size) {
+  if (!ptr) {
+    return;
+  }
+  uint64_t *meta = reinterpret_cast<uint64_t *>(ptr) - 2;
+  uint64_t tok = meta[1];
+  uint64_t off = meta[0];
+  MallocTracer::GetInstance()->TraceFreeSized(tok, size);
+  do_free(reinterpret_cast<char *>(meta) - off);
+}
+
 extern "C" PERFTOOLS_DLL_DECL void* tc_malloc(size_t size) PERFTOOLS_NOTHROW {
   if (ThreadCache::IsUseEmergencyMalloc()) {
     return tcmalloc::EmergencyMalloc(size);
@@ -170,7 +181,7 @@ extern "C" PERFTOOLS_DLL_DECL void tc_cfree(void* ptr) PERFTOOLS_NOTHROW
 extern "C" PERFTOOLS_DLL_DECL void tc_free_sized(void *ptr, size_t size) PERFTOOLS_NOTHROW {
   ASSERT(!tcmalloc::IsEmergencyPtr(ptr));
   MallocHook::InvokeDeleteHook(ptr);
-  trace_free(ptr);
+  trace_free_sized(ptr, size);
 }
 
 extern "C" PERFTOOLS_DLL_DECL void* tc_calloc(size_t n, size_t elem_size) PERFTOOLS_NOTHROW {
@@ -287,7 +298,7 @@ static inline ATTRIBUTE_ALWAYS_INLINE void* do_tracing_memalign_inner(size_t ali
     p = do_malloc(align_size_up(size + extra, align));
   }
   if (PREDICT_TRUE(p != NULL)) {
-    uint64_t tok = MallocTracer::GetInstance()->TraceMalloc(size);
+    uint64_t tok = MallocTracer::GetInstance()->TraceMemalign(size, align);
     uint64_t *meta = static_cast<uint64_t *>(p) + (extra - 16) / 8;
     meta[0] = extra - 16;
     meta[1] = tok;

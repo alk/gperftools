@@ -22,6 +22,9 @@ module Events
   class Free
     def_custom_attrs :thread_id, :tok
   end
+  class FreeSized
+    def_custom_attrs :thread_id, :tok, :size
+  end
   class Realloc
     def_custom_attrs :thread_id, :tok, :size, :old_tok
   end
@@ -38,6 +41,9 @@ module Events
     def_custom_attrs :thread_id, :ts, :cpu, :size
   end
   class End
+  end
+  class SyncAllEnd
+    def_custom_attrs :ts, :cpu
   end
 end
 
@@ -103,6 +109,14 @@ class EventsStream
       @prev_token = tok
       Events::Free.new(@thread_id, tok)
     end
+    def consume_free_sized(first_word, second_word)
+      tok = Helpers.unzigzag(first_word >> 3) + @prev_token
+      @prev_token = tok
+      sz = Helpers.unzigzag(second_word) + @prev_size
+      @prev_size = sz
+      sz = sz << 3
+      Events::FreeSized.new(@thread_id, tok, sz)
+    end
     def consume_realloc(first_word, second_word)
       sz = Helpers.unzigzag(first_word >> 3) + @prev_size
       @prev_size = sz
@@ -114,7 +128,7 @@ class EventsStream
       Events::Realloc.new(@thread_id, tok, sz, old_tok)
     end
     def consume_memalign(first_word, second_word)
-      sz = Helpers.unzigzag(first_word >> 3) + @prev_size
+      sz = Helpers.unzigzag(first_word >> 8) + @prev_size
       @prev_size = sz
       sz = sz << 3
       tok = @malloc_tok_seq
@@ -190,6 +204,8 @@ class EventsStream
       end
 
       return Events::Buf.new(thread_id, ts, cpu, buf_size)
+    when 4 # FreeSized
+      return @curr_thread.consume_free_sized(first, read_varint())
     when 07 # Death. Yes, octal
       thread_id = first_hi
       ts, cpu = *read_ts_and_cpu()
@@ -203,6 +219,9 @@ class EventsStream
       return @curr_thread.consume_realloc(first, read_varint())
     when 037 # Memalign
       return @curr_thread.consume_memalign(first, read_varint())
+    when 047 # SyncAllEnd
+      ts, cpu = *read_ts_and_cpu()
+      return Events::SyncAllEnd.new(ts, cpu)
     else
       raise "bad code: #{first}"
     end
