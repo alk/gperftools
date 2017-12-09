@@ -674,12 +674,8 @@ void MallocTracer::DumpEverything() {
     if (rv != 0) {
       errno = rv;
       perror("pthread_kill");
-      asm volatile ("int $3; nop");
-      // abort();
+      abort();
     }
-
-    // sem_wait(&signal_completions);
-    // signalled--;
   }
 
   // yes we need to hold the lock across all signal handler
