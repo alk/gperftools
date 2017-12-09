@@ -33,8 +33,6 @@
 
 #include "run_benchmark.h"
 
-#include "malloc_tracer.h"
-
 static void bench_fastpath_throughput(long iterations,
                                       uintptr_t param)
 {
