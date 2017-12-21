@@ -163,12 +163,12 @@ noinst_SCRIPTS =
 # be installed, add it here.  (Stuff in TESTS is automatically added later).
 noinst_PROGRAMS =
 
-noinst_PROGRAMS += replay
+# noinst_PROGRAMS += replay
 
-replay_SOURCES = replay.cc src/varint_codec.cc actual_replay.h actual_replay.cc replay.capnp.c++ replay.capnp.h
-replay_LDADD = $(LIBTCMALLOC_MINIMAL)
-replay_CXXFLAGS = -pthread
-replay_LDFLAGS = -pthread -lcapnp -lkj
+# replay_SOURCES = replay.cc src/varint_codec.cc actual_replay.h actual_replay.cc replay.capnp.c++ replay.capnp.h
+# replay_LDADD = $(LIBTCMALLOC_MINIMAL)
+# replay_CXXFLAGS = -pthread
+# replay_LDFLAGS = -pthread -lcapnp -lkj
 
 # Binaries we might build that should be installed
 bin_PROGRAMS =
