@@ -398,6 +398,7 @@ static void *dumper_thread(void *__dummy) {
     usleep(kDumperPeriodMicros);
     MallocTracer::DumpEverything();
   }
+  return NULL;
 }
 
 static void do_setup_tail() {

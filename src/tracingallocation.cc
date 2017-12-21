@@ -317,16 +317,16 @@ static void *retry_tracing_memalign(void *arg) {
   return do_tracing_memalign_inner(data->align, data->size);
 }
 
-static void* handle_oom_malloc(malloc_fn retry_fn,
+static inline void* handle_oom_malloc(malloc_fn retry_fn,
                                void* retry_arg) {
   return handle_oom(retry_fn, retry_arg, false, true);
 }
 
-static void* handle_oom_cpp_throw(malloc_fn retry_fn,
+static inline void* handle_oom_cpp_throw(malloc_fn retry_fn,
                                   void* retry_arg) {
   return handle_oom(retry_fn, retry_arg, true, false);
 }
-static void* handle_oom_cpp_nothrow(malloc_fn retry_fn,
+static inline void* handle_oom_cpp_nothrow(malloc_fn retry_fn,
                                     void* retry_arg) {
   return handle_oom(retry_fn, retry_arg, true, true);
 }
