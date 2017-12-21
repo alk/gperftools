@@ -25,26 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "config.h"
-
 #include "varint_codec.h"
-
-#include "base/googleinit.h"
-
-char *VarintCodec::encode_varint_huge(char *place, uint64_t val, uint64_t high) {
-  val = (val << 10) | (1 << 9);
-  *(uint64_t *)place = val;
-  *(uint16_t *)(place + 8) = high;
-  return place + 10;
-}
-
-VarintCodec::DecodeResult<uint64_t> VarintCodec::decode_huge_varint_slow(char *place, uint64_t val, unsigned p)
-{
-  DecodeResult<uint64_t> rv;
-  rv.advance = p;
-  rv.value = val | ((uint64_t)*(uint16_t *)(place + 8) << (64-p));
-  return rv;
-}
 
 __attribute__((aligned(64)))
 unsigned char VarintCodec::encode_bits[64] = {
@@ -65,35 +46,3 @@ uint64_t VarintCodec::decode_masks[9] = {
   0x0FFFFFFFLLU, 0x7FFFFFFFFLLU,
   0x3FFFFFFFFFFLLU, 0x1FFFFFFFFFFFFLLU,
   0xFFFFFFFFFFFFFFFFLLU};
-
-// void fill_encode_bits(void)
-// {
-//   int bits = 1;
-//   printf("encode_bits[] = {\n  ");
-//   for (int i = 0; i < 64; i++) {
-//     if (i + bits > (8 * bits)) {
-//       bits++;
-//       if (i + bits > (8 * bits)) {
-//         abort();
-//       }
-//     }
-//     VarintCodec::encode_bits[i] = bits - 1;
-
-//     const char *eol = ", ";
-//     if (i == 63) {
-//       eol = "\n};";
-//     } else if (!((i+1) % 8)) {
-//       eol = ",\n  ";
-//     }
-//     printf("%d%s", bits-1, eol);
-//   }
-//   exit(0);
-// }
-
-// namespace {
-//   struct InitEncodeBits {
-//     InitEncodeBits() {
-//       fill_encode_bits();
-//     }
-//   } init;
-// }
