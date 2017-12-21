@@ -35,56 +35,6 @@
 
 #include "varint_codec.h"
 
-namespace events {
-  struct Malloc {
-    uint64_t thread_id;
-    uint64_t token;
-    uint64_t size;
-  };
-  struct Free {
-    uint64_t thread_id;
-    uint64_t token;
-  };
-  struct FreeSized {
-    uint64_t thread_id;
-    uint64_t token;
-    uint64_t size;
-  };
-  struct Realloc {
-    uint64_t thread_id;
-    uint64_t old_token;
-    uint64_t new_token;
-    uint64_t new_size;
-  };
-  struct Memalign {
-    uint64_t thread_id;
-    uint64_t token;
-    uint64_t size;
-    uint64_t alignment;
-  };
-  struct Tok {
-    uint64_t thread_id;
-    uint64_t ts;
-    uint64_t cpu;
-    uint64_t token_base;
-  };
-  struct Death {
-    uint64_t thread_id;
-    uint64_t ts;
-    uint64_t cpu;
-  };
-  struct Buf {
-    uint64_t thread_id;
-    uint64_t ts;
-    uint64_t cpu;
-    uint64_t size;
-  };
-  struct SyncAllEnd {
-    uint64_t ts;
-    uint64_t cpu;
-  };
-} // namespace events
-
 struct EventsEncoder {
   static const unsigned kEventMalloc = 0x00;
   static const unsigned kEventFree = 0x01;
@@ -112,7 +62,8 @@ struct EventsEncoder {
     return (ts & ~1023) | (cpu & 1023);
   }
 
-  static void unbundle_ts_and_cpu(uint64_t word, uint64_t *ts, uint64_t *cpu) {
+  template <typename I1, typename I2>
+  static void unbundle_ts_and_cpu(uint64_t word, I1 *ts, I2 *cpu) {
     *ts = word & ~1023;
     *cpu = word & 1023;
   }
@@ -205,7 +156,8 @@ struct EventsEncoder {
     return first_word & kExtTypeMask;
   }
 
-  static void decode_malloc(events::Malloc *m, uint64_t first_word,
+  template <typename T>
+  static void decode_malloc(T *m, uint64_t first_word,
                             uint64_t *prev_size, uint64_t *malloc_tok_seq) {
     uint64_t sz = VarintCodec::unzigzag(first_word >> kTypeShift) + *prev_size;
     *prev_size = sz;
@@ -214,14 +166,16 @@ struct EventsEncoder {
     m->token = (*malloc_tok_seq)++;
   }
 
-  static void decode_free(events::Free *f, uint64_t first_word,
+  template <typename T>
+  static void decode_free(T *f, uint64_t first_word,
                           uint64_t *prev_token) {
     uint64_t tok = VarintCodec::unzigzag(first_word >> kTypeShift) + *prev_token;
     *prev_token = tok;
     f->token = tok;
   }
 
-  static void decode_free_sized(events::FreeSized *f,
+  template <typename T>
+  static void decode_free_sized(T *f,
                                 uint64_t first_word, uint64_t second_word,
                                 uint64_t *prev_token, uint64_t *prev_size) {
     uint64_t tok = VarintCodec::unzigzag(first_word >> kTypeShift) + *prev_token;
@@ -233,7 +187,8 @@ struct EventsEncoder {
     f->size = sz;
   }
 
-  static void decode_realloc(events::Realloc *r, uint64_t first_word, uint64_t second_word,
+  template <typename T>
+  static void decode_realloc(T *r, uint64_t first_word, uint64_t second_word,
                              uint64_t *prev_size, uint64_t *prev_token, uint64_t *malloc_tok_seq) {
     uint64_t sz = VarintCodec::unzigzag(first_word >> kExtTypeShift) + *prev_size;
     *prev_size = sz;
@@ -246,7 +201,8 @@ struct EventsEncoder {
     r->old_token = tok;
   }
 
-  static void decode_memalign(events::Memalign *m, uint64_t first_word, uint64_t second_word,
+  template <typename T>
+  static void decode_memalign(T *m, uint64_t first_word, uint64_t second_word,
                               uint64_t *prev_size, uint64_t *malloc_tok_seq) {
     uint64_t sz = VarintCodec::unzigzag(first_word >> kExtTypeShift) + *prev_size;
     *prev_size = sz;
@@ -256,27 +212,32 @@ struct EventsEncoder {
     m->alignment = second_word;
   }
 
-  static void decode_buffer(events::Buf *b,
+  template <typename T>
+  static void decode_buffer(T *b,
                             uint64_t first_word, uint64_t second_word, uint64_t third_word) {
     b->thread_id = first_word >> kTypeShift;
     unbundle_ts_and_cpu(second_word, &b->ts, &b->cpu);
     b->size = third_word;
   }
 
-  static void decode_token(events::Tok *t,
+  // TODO: drop thread_id from this event encoding
+  template <typename T>
+  static void decode_token(T *t,
                            uint64_t first_word, uint64_t second_word, uint64_t third_word) {
     t->thread_id = first_word >> kTypeShift;
     unbundle_ts_and_cpu(second_word, &t->ts, &t->cpu);
     t->token_base = third_word;
   }
 
-  static void decode_death(events::Death *d,
+  template <typename T>
+  static void decode_death(T *d,
                            uint64_t first_word, uint64_t second_word) {
     d->thread_id = first_word >> kExtTypeShift;
     unbundle_ts_and_cpu(second_word, &d->ts, &d->cpu);
   }
 
-  static void decode_sync_all_all(events::SyncAllEnd *ev,
+  template <typename T>
+  static void decode_sync_all_all(T *ev,
                                   uint64_t first_word, uint64_t second_word) {
     unbundle_ts_and_cpu(second_word, &ev->ts, &ev->cpu);
   }
