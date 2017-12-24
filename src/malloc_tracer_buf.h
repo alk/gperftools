@@ -30,6 +30,9 @@
 
 #ifndef MALLOC_TRACER_BUF_H
 #define MALLOC_TRACER_BUF_H
+#include <string.h>
+
+#include "internal_logging.h"
 
 struct TracerBuffer {
   static const int kMinSizeAfterRefresh = 1 << 20;
@@ -39,12 +42,24 @@ struct TracerBuffer {
 
   virtual bool IsFullySetup() = 0;
 
-  char* current{};
-  char* const limit{};
+  void AppendData(const char* buf, size_t size) {
+    ASSERT(size <= kMinSizeAfterRefresh);
+
+    if (limit - current < size) {
+      Refresh();
+    }
+    ASSERT(limit - current >= size);
+
+    memcpy(current, buf, size);
+    current += size;
+  }
 
   static TracerBuffer* GetInstance();
 
- private:
+protected:
+  char* current{};
+  char* limit{};
+
   virtual ~TracerBuffer();
 };
 

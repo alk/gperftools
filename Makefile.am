@@ -774,7 +774,7 @@ dist_doc_DATA += docs/tcmalloc.html \
                  docs/tcmalloc-opspersec.vs.size.3.threads.png 		\
                  docs/tcmalloc-opspersec.vs.size.4.threads.png 		\
                  docs/tcmalloc-opspersec.vs.size.5.threads.png 		\
-                 docs/tcmalloc-opspersec.vs.size.8.threaads.png
+                 docs/tcmalloc-opspersec.vs.size.8.threads.png
 
 # I don't know how to say "distribute the .dot files but don't install them";
 # noinst doesn't seem to work with data.  I separate them out anyway, in case

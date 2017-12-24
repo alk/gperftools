@@ -50,12 +50,12 @@
 #include <snappy-c.h>
 #endif
 
+#include "malloc_tracer.h"
 #include "malloc_tracer_buf.h"
 
 // #include "page_heap_allocator.h"
 // #include "base/spinlock.h"
-// #include "base/googleinit.h"
-// #include "malloc_tracer.h"
+#include "base/googleinit.h"
 
 
 static int unix_open(const char *path) {
@@ -129,17 +129,18 @@ static int tcp_open(const char *path) {
   return fd;
 }
 
+#define FD_BUF_SIZE (32 << 20)
+
 static char fd_buf[2][FD_BUF_SIZE] __attribute__((aligned(4096)));
 static int write_buf;
 static int to_save_pos[2];
 
-static int fd_buf_pos;
+static int fd;
 
 static sem_t space_sem[2];
 static sem_t ready_sem[2];
 static uint64_t total_saved;
 static uint64_t total_written;
-static uint64_t thread_dump_written;
 
 static bool fully_setup;
 
@@ -173,7 +174,7 @@ static void *saver_thread(void *__dummy) {
     if (to_save == 0) {
       break;
     }
-    // printf("saving %d for %lld\n", bufno, (long long)to_save);
+    printf("saving %d for %lld\n", bufno, (long long)to_save);
 
     char *save_buf = fd_buf[bufno];
 
@@ -255,12 +256,12 @@ static void *saver_thread(void *__dummy) {
     p += snprintf(p, buf + sizeof(buf) - p,
                   "total_saved = %llu (%g%%)\n", (unsigned long long)total_saved,
              100.0 * total_saved / total_written);
-    p += snprintf(p, buf + sizeof(buf) - p,
-                  "token_counter = %llu\n", (unsigned long long)token_counter);
-    p += snprintf(p, buf + sizeof(buf) - p,
-                  "thread_id_counter = %llu\n", (unsigned long long)thread_id_counter);
-    p += snprintf(p, buf + sizeof(buf) - p,
-                  "thread_dump_written = %llu\n", (unsigned long long)thread_dump_written);
+    // p += snprintf(p, buf + sizeof(buf) - p,
+    //               "token_counter = %llu\n", (unsigned long long)token_counter);
+    // p += snprintf(p, buf + sizeof(buf) - p,
+    //               "thread_id_counter = %llu\n", (unsigned long long)thread_id_counter);
+    // p += snprintf(p, buf + sizeof(buf) - p,
+    //               "thread_dump_written = %llu\n", (unsigned long long)thread_dump_written);
     printf("%s", buf);
     int rv = write(fd, buf, sizeof(buf));
     if (rv < 0) {
@@ -309,58 +310,11 @@ static void do_setup_tail() {
   }
   sem_wait(&saver_thread_sem);
 
-  sem_init(&signal_completions, 0, 0);
-
-  struct sigaction sa;
-  memset(&sa, 0, sizeof(sa));
-  sa.sa_handler = dump_signal_handler;
-  sa.sa_flags = SA_RESTART;
-  rv = sigaction(dump_signal, &sa, NULL);
-  if (rv != 0) {
-    perror("sigaction");
-    printf("min = %x, max = %x\n", SIGRTMIN, SIGRTMAX);
-    abort();
-  }
-
-  pthread_t dumper;
-  rv = pthread_create(&dumper, 0, dumper_thread, 0);
-  if (rv != 0) {
-    errno = rv;
-    perror("pthread_create");
-    abort();
-  }
-
-  SpinLockHolder h(&lock);
+  // TODO: atomics
   fully_setup = true;
 }
 
 REGISTER_MODULE_INITIALIZER(setup_tail, do_setup_tail());
-
-static void save_buf_internal(int);
-
-static void save_buf() {
-  int to_write = fd_buf_pos & -4096;
-
-  if (to_write == 0) {
-    abort();
-  }
-  save_buf_internal(to_write);
-}
-
-static void save_buf_internal(int to_write) {
-  int next_buf = (write_buf + 1) % 2;
-  // printf("waiting space in %d\n", next_buf);
-  sem_wait(space_sem + next_buf);
-  memcpy(fd_buf[next_buf], fd_buf[write_buf] + to_write, fd_buf_pos - to_write);
-
-  fd_buf_pos -= to_write;
-  total_written += to_write;
-
-  to_save_pos[write_buf] = to_write;
-  sem_post(ready_sem + write_buf);
-  // printf("posted readiness in %d\n", write_buf);
-  write_buf = next_buf;
-}
 
 class ActualTracerBuffer : public TracerBuffer {
 public:
@@ -368,12 +322,14 @@ public:
 
   virtual void Refresh();
   virtual void Finalize();
+  virtual bool IsFullySetup();
 
-  void SetBuffer(char *buffer, char *current, size_t size) {
+  void SetBuffer(char *buffer, size_t used, size_t size) {
+    printf("SetBuffer(%p(%d), %zu, %zu)\n",
+           buffer, (fd_buf[1] == buffer) ? 1 : (fd_buf[0] == buffer) ? 0 : -1, used, size);
     start = buffer;
-    current = current;
-    char* new_limit = buffer + size;
-    memcpy(const_cast<char *>(&limit), &new_limit, sizeof(new_limit));
+    current = buffer + used;
+    limit = buffer + size;
   }
 
   void RefreshInternal(int to_write);
@@ -385,30 +341,30 @@ private:
 };
 
 ActualTracerBuffer::ActualTracerBuffer() {
-  SetBuffer(fd_buf[0], fd_buf[0], FD_BUF_SIZE);
+  SetBuffer(fd_buf[0], 0, FD_BUF_SIZE);
 }
 
 void ActualTracerBuffer::RefreshInternal(int to_write) {
-  int tail = limit - current - to_write;
-
-  to_save_pos[write_buf] = to_write;
-  sem_post(ready_sem + write_buf);
+  int tail = current - start - to_write;
 
   int next_buf = (write_buf + 1) % 2;
   sem_wait(space_sem + next_buf);
 
   memcpy(fd_buf[next_buf], fd_buf[write_buf] + to_write, tail);
 
+  to_save_pos[write_buf] = to_write;
+  sem_post(ready_sem + write_buf);
+
   write_buf = next_buf;
-  SetBuffer(fd_buf[write_buf], fd_buf[write_buf] + tail, FD_BUF_SIZE);
+  SetBuffer(fd_buf[write_buf], tail, FD_BUF_SIZE);
 }
 
 void ActualTracerBuffer::Refresh() {
-  RefreshInternal((limit - current) & -4096);
+  RefreshInternal((current - start) & -4096);
 }
 
 void ActualTracerBuffer::Finalize() {
-  RefreshInternal(limit - current);
+  RefreshInternal(current - start);
   // signal saver thread that we're done
   RefreshInternal(0);
 
@@ -423,12 +379,13 @@ bool ActualTracerBuffer::IsFullySetup() {
 
 TracerBuffer::~TracerBuffer() {}
 
-int TracerBuffer::kMinSizeAfterRefresh;
+const int TracerBuffer::kMinSizeAfterRefresh;
 
 TracerBuffer* TracerBuffer::GetInstance() {
   static union {
     void *dummy;
-    ActualTracerBuffer actual_buffer;
+    double dummy2;
+    char bytes[sizeof(ActualTracerBuffer)];
   } space;
   static int initialized;
 
@@ -438,9 +395,9 @@ TracerBuffer* TracerBuffer::GetInstance() {
     sem_init(ready_sem + 0, 0, 0);
     sem_init(ready_sem + 1, 0, 0);
 
-    new (&space.actual_buffer) ActualTracerBuffer();
+    new (&space) ActualTracerBuffer();
     initialized = true;
   }
 
-  return &space.actual_buffer;
+  return reinterpret_cast<ActualTracerBuffer*>(&space);
 }

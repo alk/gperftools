@@ -44,16 +44,13 @@
 #include <netdb.h>
 #include <sys/un.h>
 
-// #undef USE_SNAPPY
-
-#ifdef USE_SNAPPY
-#include <snappy-c.h>
-#endif
+#include <x86intrin.h>
 
 #include "page_heap_allocator.h"
 #include "base/spinlock.h"
 #include "base/googleinit.h"
 #include "malloc_tracer.h"
+#include "malloc_tracer_buf.h"
 
 static const int kDumperPeriodMicros = 3000;
 
@@ -62,8 +59,6 @@ static SpinLock signal_lock(base::LINKER_INITIALIZED);
 
 static const int dump_signal = std::max(std::min(0x35, SIGRTMAX), SIGRTMIN);
 
-static int fd;
-
 static const int kTokenSize = 4 << 10;
 static const int kTSShift = 10;
 static const uint64_t kTSMask = ~((1ULL << kTSShift) - 1);
@@ -71,18 +66,9 @@ static const uint64_t kTSMask = ~((1ULL << kTSShift) - 1);
 static uint64_t token_counter;
 static uint64_t thread_id_counter;
 
+static uint64_t thread_dump_written;
+
 static uint64_t base_ts;
-
-#define FD_BUF_SIZE (32 << 20)
-
-static char fd_buf[2][FD_BUF_SIZE] __attribute__((aligned(4096)));
-static int write_buf;
-static int to_save_pos[2];
-
-static int fd_buf_pos;
-
-static sem_t space_sem[2];
-static sem_t ready_sem[2];
 
 __thread MallocTracer::Storage MallocTracer::instance ATTR_INITIAL_EXEC;
 __thread bool had_tracer;
@@ -94,6 +80,8 @@ static pthread_once_t setup_once = PTHREAD_ONCE_INIT;
 static pthread_once_t first_tracer_setup_once = PTHREAD_ONCE_INIT;
 
 static tcmalloc::PageHeapAllocator<MallocTracer> malloc_tracer_allocator;
+
+static TracerBuffer* tracer_buffer;
 
 static sem_t signal_completions;
 static bool no_more_writes;
@@ -156,6 +144,8 @@ static __thread bool in_setup ATTR_INITIAL_EXEC;
 void MallocTracer::do_setup_tls() {
   in_setup = true;
 
+  tracer_buffer = TracerBuffer::GetInstance();
+
   malloc_tracer_allocator.Init();
   int rv = pthread_key_create(&instance_key, &MallocTracer::malloc_tracer_destructor);
   if (rv) {
@@ -163,10 +153,7 @@ void MallocTracer::do_setup_tls() {
     abort();
   }
 
-  sem_init(space_sem + 0, 0, 1);
-  sem_init(space_sem + 1, 0, 1);
-  sem_init(ready_sem + 0, 0, 0);
-  sem_init(ready_sem + 1, 0, 0);
+  sem_init(&signal_completions, 0, 0);
 
   in_setup = false;
 }
@@ -190,6 +177,29 @@ static void *dumper_thread(void *__dummy) {
   }
   return NULL;
 }
+
+static void malloc_tracer_setup_tail() {
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = dump_signal_handler;
+  sa.sa_flags = SA_RESTART;
+  int rv = sigaction(dump_signal, &sa, NULL);
+  if (rv != 0) {
+    perror("sigaction");
+    printf("min = %x, max = %x\n", SIGRTMIN, SIGRTMAX);
+    abort();
+  }
+
+  pthread_t dumper;
+  rv = pthread_create(&dumper, 0, dumper_thread, 0);
+  if (rv != 0) {
+    errno = rv;
+    perror("pthread_create");
+    abort();
+  }
+}
+
+REGISTER_MODULE_INITIALIZER(setup_tail, malloc_tracer_setup_tail());
 
 MallocTracer *MallocTracer::GetInstanceSlow(void) {
   pthread_once(&first_tracer_setup_once, MallocTracer::SetupFirstTracer);
@@ -249,16 +259,7 @@ static void append_buf_locked(const char *buf, size_t size) {
   if (no_more_writes) {
     return;
   }
-  if (fd_buf_pos + size > sizeof(fd_buf[0])) {
-    save_buf();
-  }
-  memcpy(fd_buf[write_buf] + fd_buf_pos, buf, size);
-  fd_buf_pos += size;
-}
-
-static void append_buf(const char *buf, size_t size) {
-  SpinLockHolder h(&lock);
-  append_buf_locked(buf, size);
+  tracer_buffer->AppendData(buf, size);
 }
 
 static inline uint64_t ts_and_cpu() {
@@ -356,7 +357,7 @@ void MallocTracer::RefreshToken() {
 }
 
 void MallocTracer::DumpEverything() {
-  TracerBuffer* tracer_Buffer = TracerBuffer::GetInstance();
+  TracerBuffer* tracer_buffer = TracerBuffer::GetInstance();
   SpinLockHolder h(&lock);
   if (!tracer_buffer->IsFullySetup()) {
     return;
@@ -424,7 +425,8 @@ MallocTracer::~MallocTracer() {
   p = VarintCodec::encode_unsigned(p, enc.first);
   SetBufPtr(VarintCodec::encode_unsigned(p, enc.second));
 
-  append_buf(buf_storage, buf_ptr - buf_storage);
+  SpinLockHolder h(&lock);
+  append_buf_locked(buf_storage, buf_ptr - buf_storage);
 }
 
 static void finalize_buf() {
@@ -436,27 +438,13 @@ static void finalize_buf() {
     no_more_writes = true;
   }
 
-  if (fd_buf_pos >= 4096) {
-    save_buf();
-  }
-
-  char *p = fd_buf[write_buf] + fd_buf_pos;
+  char encoded_end[16];
+  char *p = encoded_end;
   p = VarintCodec::encode_unsigned(p, EventsEncoder::encode_end());
-  fd_buf_pos = (p - fd_buf[write_buf]);
-  // fd_buf_pos = (p - fd_buf[write_buf] + 4095) & -4096;
+  ASSERT(p <= encoded_end + sizeof(encoded_end));
 
-  save_buf_internal(fd_buf_pos);
-
-  if (fd_buf_pos != 0) {
-    abort();
-  }
-
-  // signal saver thread that we're done
-  save_buf_internal(0);
-
-  // and wait until it is done
-  sem_wait(space_sem + (write_buf + 1) % 2);
-  sem_wait(space_sem + (write_buf + 2) % 2);
+  tracer_buffer->AppendData(encoded_end, p - encoded_end);
+  tracer_buffer->Finalize();
 }
 
 REGISTER_MODULE_DESTRUCTOR(tracer_deinit, do {
