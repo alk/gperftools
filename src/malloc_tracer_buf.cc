@@ -413,7 +413,6 @@ void ActualTracerBuffer::Finalize() {
   sem_wait(space_sem + (write_buf + 2) % 2);
 }
 
-
 TracerBuffer::~TracerBuffer() {}
 
 int TracerBuffer::kMinSizeAfterRefresh;
