@@ -774,7 +774,7 @@ dist_doc_DATA += docs/tcmalloc.html \
                  docs/tcmalloc-opspersec.vs.size.3.threads.png 		\
                  docs/tcmalloc-opspersec.vs.size.4.threads.png 		\
                  docs/tcmalloc-opspersec.vs.size.5.threads.png 		\
-                 docs/tcmalloc-opspersec.vs.size.8.threads.png
+                 docs/tcmalloc-opspersec.vs.size.8.threaads.png
 
 # I don't know how to say "distribute the .dot files but don't install them";
 # noinst doesn't seem to work with data.  I separate them out anyway, in case
@@ -793,6 +793,8 @@ libtcmalloc_minimal_tracing_la_SOURCES =  src/tracingallocation.cc \
                                           src/malloc_trace_encoder.h \
                                           src/malloc_tracer.h \
                                           src/malloc_tracer.cc \
+                                          src/malloc_tracer_buf.h \
+                                          src/malloc_tracer_buf.cc \
                                           src/crc32c.c \
                                           $(TCMALLOC_MINIMAL_INCLUDES)
 libtcmalloc_minimal_tracing_la_CXXFLAGS = -DNO_TCMALLOC_SAMPLES \

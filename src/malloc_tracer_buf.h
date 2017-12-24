@@ -37,6 +37,8 @@ struct TracerBuffer {
   virtual void Refresh() = 0;
   virtual void Finalize() = 0;
 
+  virtual bool IsFullySetup() = 0;
+
   char* current{};
   char* const limit{};
 

@@ -96,7 +96,6 @@ static pthread_once_t first_tracer_setup_once = PTHREAD_ONCE_INIT;
 static tcmalloc::PageHeapAllocator<MallocTracer> malloc_tracer_allocator;
 
 static sem_t signal_completions;
-static bool fully_setup;
 static bool no_more_writes;
 
 static union {
@@ -357,8 +356,9 @@ void MallocTracer::RefreshToken() {
 }
 
 void MallocTracer::DumpEverything() {
+  TracerBuffer* tracer_Buffer = TracerBuffer::GetInstance();
   SpinLockHolder h(&lock);
-  if (!fully_setup) {
+  if (!tracer_buffer->IsFullySetup()) {
     return;
   }
 

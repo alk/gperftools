@@ -141,6 +141,8 @@ static uint64_t total_saved;
 static uint64_t total_written;
 static uint64_t thread_dump_written;
 
+static bool fully_setup;
+
 #ifdef USE_SNAPPY
 static char snappy_buf[FD_BUF_SIZE*2] __attribute__((aligned(4096)));
 static int snappy_tail;
@@ -276,6 +278,8 @@ static void *saver_thread(void *__dummy) {
 }
 
 static void do_setup_tail() {
+  (void)TracerBuffer::GetInstance();
+
   int rv;
 
   {
@@ -411,6 +415,10 @@ void ActualTracerBuffer::Finalize() {
   // and wait until it is done
   sem_wait(space_sem + (write_buf + 1) % 2);
   sem_wait(space_sem + (write_buf + 2) % 2);
+}
+
+bool ActualTracerBuffer::IsFullySetup() {
+  return fully_setup;
 }
 
 TracerBuffer::~TracerBuffer() {}
