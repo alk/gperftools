@@ -48,6 +48,7 @@
 #include "malloc_tracer_buf.h"
 
 #include "base/googleinit.h"
+#include "base/atomicops.h"
 
 #define FD_BUF_SIZE (32 << 20)
 
@@ -79,7 +80,7 @@ static sem_t space_sem[2];
 static sem_t ready_sem[2];
 static uint64_t total_saved;
 
-static bool fully_setup;
+static AtomicWord fully_setup;
 
 static sem_t saver_thread_sem;
 
@@ -173,8 +174,7 @@ static void do_setup_tail() {
   }
   sem_wait(&saver_thread_sem);
 
-  // TODO: atomics
-  fully_setup = true;
+  base::subtle::Release_Store(&fully_setup, 1);
 }
 
 REGISTER_MODULE_INITIALIZER(setup_tail, do_setup_tail());
@@ -236,7 +236,7 @@ void ActualTracerBuffer::Finalize() {
 }
 
 bool ActualTracerBuffer::IsFullySetup() {
-  return fully_setup;
+  return base::subtle::Acquire_Load(&fully_setup);
 }
 
 TracerBuffer::~TracerBuffer() {}
