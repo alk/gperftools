@@ -53,81 +53,7 @@
 #include "malloc_tracer.h"
 #include "malloc_tracer_buf.h"
 
-// #include "page_heap_allocator.h"
-// #include "base/spinlock.h"
 #include "base/googleinit.h"
-
-
-static int unix_open(const char *path) {
-  struct sockaddr_un us;
-  us.sun_family = AF_UNIX;
-  memset(us.sun_path, 0, sizeof(us.sun_path));
-  strncpy(us.sun_path, path, sizeof(us.sun_path) - 1);
-
-  int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-  if (fd < 0) {
-    perror("socket");
-    abort();
-  }
-  int rv = connect(fd, reinterpret_cast<struct sockaddr *>(&us), sizeof(us));
-  if (rv < 0) {
-    perror("connect");
-    abort();
-  }
-  int optval = 1024*1024;
-  rv = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &optval, sizeof(optval));
-  if (rv < 0) {
-    perror("setsockopt");
-    abort();
-  }
-  return fd;
-}
-
-static int tcp_open(const char *path) {
-  const char *colon = strchr(path, ':');
-  if (!colon) {
-    errno = EINVAL;
-    return -1;
-  }
-  char *addr = (char *)calloc(colon - path + 1, 1);
-  memcpy(addr, path, colon - path);
-
-  struct addrinfo *p;
-  struct addrinfo hints;
-
-  memset(&hints, 0, sizeof(struct addrinfo));
-  hints.ai_family = AF_UNSPEC; /* Allow IPv4 or IPv6 */
-  hints.ai_socktype = SOCK_STREAM;
-
-  int rv = getaddrinfo(addr, colon + 1, NULL, &p);
-  if (rv != 0) {
-    printf("getaddrinfo:%s\n", gai_strerror(rv));
-    abort();
-  }
-
-  int fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-  if (fd < 0) {
-    perror("socket");
-    abort();
-  }
-
-  rv = connect(fd, p->ai_addr, p->ai_addrlen);
-  if (rv < 0) {
-    perror("connect");
-    abort();
-  }
-
-  freeaddrinfo(p);
-  free(p);
-
-  int val = 4 << 20;
-  rv = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &val, sizeof(val));
-  if (rv < 0) {
-    perror("setsockopt");
-    abort();
-  }
-  return fd;
-}
 
 #define FD_BUF_SIZE (32 << 20)
 
@@ -137,10 +63,27 @@ static int to_save_pos[2];
 
 static int fd;
 
+static void must_write_to_fd(const char* buf, int bytes) {
+  if (fd < 0) {
+    return;
+  }
+  do {
+    int rv = write(fd, buf, bytes);
+    if (rv < 0) {
+      if (errno != EINTR) {
+        perror("write");
+        abort();
+      }
+      rv = 0;
+    }
+    bytes -= rv;
+    buf += rv;
+  } while (bytes > 0);
+}
+
 static sem_t space_sem[2];
 static sem_t ready_sem[2];
 static uint64_t total_saved;
-static uint64_t total_written;
 
 static bool fully_setup;
 
@@ -174,7 +117,7 @@ static void *saver_thread(void *__dummy) {
     if (to_save == 0) {
       break;
     }
-    printf("saving %d for %lld\n", bufno, (long long)to_save);
+    // printf("saving %d for %lld\n", bufno, (long long)to_save);
 
     char *save_buf = fd_buf[bufno];
 
@@ -211,14 +154,7 @@ static void *saver_thread(void *__dummy) {
     to_save = (to_save + 4095) & -4096;
 #endif
 
-    int rv = write(fd, save_buf, to_save);
-    if (rv < 0) {
-      perror("write");
-      abort();
-    }
-    if (rv != to_save) {
-      abort();
-    }
+    must_write_to_fd(save_buf, to_save);
 #ifdef USE_SNAPPY
     if (to_save != 0) {
       memcpy(snappy_buf, snappy_buf + to_save, snappy_tail);
@@ -238,11 +174,7 @@ static void *saver_thread(void *__dummy) {
     padding_len |= 0xfe;
     memcpy(snappy_buf + snappy_tail, &padding_len, sizeof(padding_len));
 
-    int rv = write(fd, snappy_buf, new_tail);
-    if (rv < 0) {
-      perror("write");
-      abort();
-    }
+    must_write_to_fd(snappy_buf, new_tail);
     total_saved += new_tail;
   }
 #endif
@@ -252,10 +184,12 @@ static void *saver_thread(void *__dummy) {
     memset(buf, 0, sizeof(buf));
     char *p = buf;
     p += snprintf(p, buf + sizeof(buf) - p,
-                  "total_written = %llu\n", (unsigned long long)total_written);
-    p += snprintf(p, buf + sizeof(buf) - p,
-                  "total_saved = %llu (%g%%)\n", (unsigned long long)total_saved,
-             100.0 * total_saved / total_written);
+                  "total_saved = %llu\n", (unsigned long long)total_saved);
+    // p += snprintf(p, buf + sizeof(buf) - p,
+    //               "total_written = %llu\n", (unsigned long long)total_written);
+    // p += snprintf(p, buf + sizeof(buf) - p,
+    //               "total_saved = %llu (%g%%)\n", (unsigned long long)total_saved,
+    //          100.0 * total_saved / total_written);
     // p += snprintf(p, buf + sizeof(buf) - p,
     //               "token_counter = %llu\n", (unsigned long long)token_counter);
     // p += snprintf(p, buf + sizeof(buf) - p,
@@ -263,11 +197,7 @@ static void *saver_thread(void *__dummy) {
     // p += snprintf(p, buf + sizeof(buf) - p,
     //               "thread_dump_written = %llu\n", (unsigned long long)thread_dump_written);
     printf("%s", buf);
-    int rv = write(fd, buf, sizeof(buf));
-    if (rv < 0) {
-      perror("write");
-      abort();
-    }
+    must_write_to_fd(buf, sizeof(buf));
   }
 
   close(fd);
@@ -278,31 +208,46 @@ static void *saver_thread(void *__dummy) {
   return 0;
 }
 
+static void open_trace_output() {
+  fd = -1;
+
+  char *filename = getenv("TCMALLOC_TRACE_OUTPUT");
+  if (filename == NULL) {
+    return;
+  }
+
+  unsetenv("TCMALLOC_TRACE_OUTPUT");
+
+  // O_NONBLOCK is for named pipes
+  fd = open(filename, O_WRONLY|O_CREAT|O_NONBLOCK, 0644);
+  if (fd < 0) {
+    perror("open");
+    fprintf(stderr, "will not save trace anywhere\n");
+    return;
+  }
+
+  int flags = fcntl(fd, F_GETFL);
+  if (flags < 0) {
+    perror("fcntl(F_GETFL)");
+    abort();
+  }
+  flags &= ~O_NONBLOCK;
+  fcntl(fd, F_SETFL, flags);
+  // O_DIRECT is good idea for regular files on disk
+  fcntl(fd, F_SETFL, flags | O_DIRECT);
+
+  // if output is pipe, we need larger buffer
+  fcntl(fd, F_SETPIPE_SZ, 1 << 20);
+}
+
 static void do_setup_tail() {
   (void)TracerBuffer::GetInstance();
 
-  int rv;
-
-  {
-    char namebuf[1024];
-    snprintf(namebuf, sizeof(namebuf)-1, "/tmp/mtrace-%d-%llu",
-             (int)getpid(), (unsigned long long)time(0));
-    fd = open(namebuf, O_WRONLY|O_DIRECT|O_CREAT, 0644);
-  }
-
-  // fd = open("outpipe", O_WRONLY, 0644);
-  // fd = open("output", O_WRONLY|O_DIRECT|O_CREAT, 0644);
-  // fd = open("/dev/null", O_WRONLY, 0777);
-  // fd = unix_open("/tmp/tmpsock");
-  // fd = tcp_open("192.168.1.164:1024");
-  if (fd < 0) {
-    perror("open");
-    abort();
-  }
+  open_trace_output();
 
   sem_init(&saver_thread_sem, 0, 0);
   pthread_t saver;
-  rv = pthread_create(&saver, 0, saver_thread, 0);
+  int rv = pthread_create(&saver, 0, saver_thread, 0);
   if (rv != 0) {
     errno = rv;
     perror("pthread_create");
@@ -325,8 +270,8 @@ public:
   virtual bool IsFullySetup();
 
   void SetBuffer(char *buffer, size_t used, size_t size) {
-    printf("SetBuffer(%p(%d), %zu, %zu)\n",
-           buffer, (fd_buf[1] == buffer) ? 1 : (fd_buf[0] == buffer) ? 0 : -1, used, size);
+    // printf("SetBuffer(%p(%d), %zu, %zu)\n",
+    //        buffer, (fd_buf[1] == buffer) ? 1 : (fd_buf[0] == buffer) ? 0 : -1, used, size);
     start = buffer;
     current = buffer + used;
     limit = buffer + size;
