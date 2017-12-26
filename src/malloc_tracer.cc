@@ -409,7 +409,7 @@ void MallocTracer::DumpEverything() {
 
   char sync_end_buf[24];
   char *p = sync_end_buf;
-  EventsEncoder::pair enc = EventsEncoder::encode_sync_all_end(ts_and_cpu());
+  EventsEncoder::pair enc = EventsEncoder::encode_sync_barrier(ts_and_cpu());
   p = VarintCodec::encode_unsigned(p, enc.first);
   p = VarintCodec::encode_unsigned(p, enc.second);
   append_buf_locked(sync_end_buf, p - sync_end_buf);

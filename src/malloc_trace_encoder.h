@@ -50,7 +50,7 @@ struct EventsEncoder {
   static const unsigned kEventEnd = kEventExtBase + 010;
   static const unsigned kEventRealloc = kEventExtBase + 020;
   static const unsigned kEventMemalign = kEventExtBase + 030;
-  static const unsigned kEventSyncAllEnd = kEventExtBase + 040;
+  static const unsigned kEventSyncBarrier = kEventExtBase + 040;
 
   static const unsigned kExtTypeShift = 8;
   static const unsigned kExtTypeMask = 0xff;
@@ -144,8 +144,8 @@ struct EventsEncoder {
     return kEventEnd;
   }
 
-  static pair encode_sync_all_end(uint64_t ts_and_cpu) {
-    return std::make_pair(kEventSyncAllEnd, ts_and_cpu);
+  static pair encode_sync_barrier(uint64_t ts_and_cpu) {
+    return std::make_pair(kEventSyncBarrier, ts_and_cpu);
   }
 
   static unsigned decode_type(uint64_t first_word) {
@@ -237,7 +237,7 @@ struct EventsEncoder {
   }
 
   template <typename T>
-  static void decode_sync_all_all(T *ev,
+  static void decode_sync_barrier(T *ev,
                                   uint64_t first_word, uint64_t second_word) {
     unbundle_ts_and_cpu(second_word, &ev->ts, &ev->cpu);
   }
