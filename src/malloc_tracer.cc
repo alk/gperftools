@@ -331,9 +331,7 @@ void MallocTracer::RefreshTokenAndDec() {
   token_base = base;
   counter = kTokenSize;
 
-  // TODO: replace with has_size_for helper (note that buf_end has
-  // margin for 10 bytes already)
-  if (buf_ptr + 20 >= buf_end) {
+  if (!HasSpaceFor(3)) {
     RefreshBuffer(0, 0, 0);
   }
 

@@ -61,7 +61,7 @@ public:
 
     uint64_t token = token_base - counter;
 
-    if (buf_ptr >= buf_end) {
+    if (!HasSpaceFor(1)) {
       RefreshBuffer(1, to_encode, to_encode);
       return token;
     }
@@ -75,7 +75,7 @@ public:
   void TraceFree(uint64_t token) {
     uint64_t to_encode = EventsEncoder::encode_free(token, &prev_token);
 
-    if (buf_ptr >= buf_end) {
+    if (!HasSpaceFor(1)) {
       RefreshBuffer(1, to_encode, to_encode);
       return;
     }
@@ -89,7 +89,7 @@ public:
       EventsEncoder::encode_free_sized(token, size,
                                        &prev_token, &prev_size);
 
-    if (buf_ptr + 10 >= buf_end) {
+    if (!HasSpaceFor(2)) {
       RefreshBuffer(2, p.first, p.second);
       return;
     }
@@ -113,7 +113,7 @@ public:
 
     uint64_t token = token_base - counter;
 
-    if (buf_ptr + 10 >= buf_end) {
+    if (!HasSpaceFor(2)) {
       RefreshBuffer(2, p.first, p.second);
       return token;
     }
@@ -138,7 +138,7 @@ public:
 
     uint64_t token = token_base - counter;
 
-    if (buf_ptr + 10 >= buf_end) {
+    if (!HasSpaceFor(2)) {
       RefreshBuffer(2, p.first, p.second);
       return token;
     }
@@ -173,8 +173,12 @@ private:
 
   MallocTracer(uint64_t _thread_id);
 
-  ATTRIBUTE_ALWAYS_INLINE void SetBufPtr(char *new_value) {
+  void SetBufPtr(char *new_value) {
     *const_cast<char * volatile *>(&buf_ptr) = new_value;
+  }
+
+  bool HasSpaceFor(int varints) {
+    return (buf_ptr + 10 * (varints - 1) < buf_end);
   }
 
   void RefreshToken();
