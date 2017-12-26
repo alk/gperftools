@@ -32,6 +32,8 @@
 #include "run_benchmark.h"
 #include "varint_codec.h"
 
+using namespace tcmalloc;
+
 static char *decode_varint(char *place, uint64_t *pval)
 {
   VarintCodec::DecodeResult<uint64_t> rv = VarintCodec::decode_unsigned(place);

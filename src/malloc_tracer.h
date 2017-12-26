@@ -42,6 +42,8 @@
 #include "malloc_trace_encoder.h"
 #include "varint_codec.h"
 
+namespace tcmalloc {
+
 class MallocTracer {
 public:
   static MallocTracer *GetInstance() {
@@ -214,5 +216,7 @@ private:
   static __thread Storage instance ATTR_INITIAL_EXEC;
   static Storage *all_tracers;
 };
+
+} // namespace tcmalloc
 
 #endif // MALLOC_TRACER_H

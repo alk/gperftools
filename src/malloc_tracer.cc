@@ -52,6 +52,8 @@
 #include "malloc_tracer.h"
 #include "malloc_tracer_buf.h"
 
+namespace tcmalloc {
+
 static const int kDumperPeriodMicros = 3000;
 
 static SpinLock lock(base::LINKER_INITIALIZED);
@@ -466,3 +468,5 @@ void MallocTracer::SPrintStats(char* start, char* end) {
            (unsigned long long)thread_id_counter,
            (unsigned long long)thread_dump_written);
 }
+
+} // namespace tcmalloc

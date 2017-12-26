@@ -27,6 +27,8 @@
 
 #include "varint_codec.h"
 
+namespace tcmalloc {
+
 __attribute__((aligned(64)))
 unsigned char VarintCodec::encode_bits[64] = {
   0, 0, 0, 0, 0, 0, 0, 0,
@@ -46,3 +48,5 @@ uint64_t VarintCodec::decode_masks[9] = {
   0x0FFFFFFFLLU, 0x7FFFFFFFFLLU,
   0x3FFFFFFFFFFLLU, 0x1FFFFFFFFFFFFLLU,
   0xFFFFFFFFFFFFFFFFLLU};
+
+} // namespace tcmalloc

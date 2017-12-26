@@ -35,6 +35,8 @@
 
 #include "varint_codec.h"
 
+namespace tcmalloc {
+
 struct EventsEncoder {
   static const unsigned kEventMalloc = 0x00;
   static const unsigned kEventFree = 0x01;
@@ -241,6 +243,6 @@ struct EventsEncoder {
   }
 };
 
-
+} // namespace tcmalloc
 
 #endif

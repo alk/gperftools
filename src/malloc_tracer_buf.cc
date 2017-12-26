@@ -50,6 +50,8 @@
 #include "base/googleinit.h"
 #include "base/atomicops.h"
 
+namespace tcmalloc {
+
 #define FD_BUF_SIZE (32 << 20)
 
 static char fd_buf[2][FD_BUF_SIZE] __attribute__((aligned(4096)));
@@ -263,3 +265,5 @@ TracerBuffer* TracerBuffer::GetInstance() {
 
   return reinterpret_cast<ActualTracerBuffer*>(&space);
 }
+
+} // namespace tcmalloc

@@ -35,6 +35,8 @@
 
 #include "internal_logging.h"
 
+namespace tcmalloc {
+
 struct TracerBuffer {
   static const int kMinSizeAfterRefresh = 1 << 20;
 
@@ -64,5 +66,7 @@ protected:
   char* current;
   char* limit;
 };
+
+} // namespace tcmalloc
 
 #endif

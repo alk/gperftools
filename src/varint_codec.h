@@ -33,6 +33,8 @@
 #include <stdint.h>
 #include <string.h>
 
+namespace tcmalloc {
+
 class VarintCodec {
 public:
   template <typename T>
@@ -150,5 +152,7 @@ inline VarintCodec::DecodeResult<uint64_t> VarintCodec::decode_unsigned(char *pl
   uint64_t mask = decode_masks[p];
   return DecodeResult<uint64_t>::make(p, val & mask);
 }
+
+} // namespace tcmalloc
 
 #endif

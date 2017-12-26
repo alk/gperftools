@@ -56,6 +56,8 @@
 #define TCMALLOC_USING_DEBUGALLOCATION
 #include "tcmalloc.cc"
 
+typedef tcmalloc::MallocTracer MallocTracer;
+
 // ========================================================================= //
 
 // Round "value" up to next "alignment" boundary.
