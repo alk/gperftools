@@ -160,10 +160,7 @@ void MallocTracer::do_setup_tls() {
 void dump_signal_handler(int sig) {
   int saved_errno = errno;
 
-  {
-    SpinLockHolder h(&signal_lock);
-    MallocTracer::instance.ptr->DumpFromSignalLocked();
-  }
+  MallocTracer::instance.ptr->SnapshotFromSignal();
   sem_post(&signal_completions);
 
   errno = saved_errno;
@@ -312,8 +309,12 @@ repeat:
   }
 }
 
+void MallocTracer::SnapshotFromSignal() {
+  signal_snapshot_buf_ptr = buf_ptr;
+}
+
 void MallocTracer::DumpFromSignalLocked() {
-  uint64_t s = buf_ptr - signal_saved_buf_ptr;
+  uint64_t s = signal_snapshot_buf_ptr - signal_saved_buf_ptr;
 
   if (s == 0) {
     return;
@@ -321,7 +322,7 @@ void MallocTracer::DumpFromSignalLocked() {
 
   RefreshBufferInnerLocked(s);
 
-  signal_saved_buf_ptr = buf_ptr;
+  signal_saved_buf_ptr = signal_snapshot_buf_ptr;
 
   thread_dump_written += s;
 }
@@ -357,15 +358,17 @@ void MallocTracer::RefreshToken() {
 
 void MallocTracer::DumpEverything() {
   TracerBuffer* tracer_buffer = TracerBuffer::GetInstance();
-  SpinLockHolder h(&lock);
   if (!tracer_buffer->IsFullySetup()) {
     return;
   }
+
+  SpinLockHolder h(&lock);
 
   if (instance.ptr) {
     assert(!signal_lock.IsHeld());
 
     assert(instance.t == pthread_self());
+    instance.ptr->SnapshotFromSignal();
     instance.ptr->DumpFromSignalLocked();
   }
 
@@ -375,7 +378,8 @@ void MallocTracer::DumpEverything() {
       continue;
     }
     // benign race here, reading buf_ptr
-    if (s->ptr->buf_ptr == s->ptr->signal_saved_buf_ptr) {
+    s->ptr->signal_snapshot_buf_ptr = *const_cast<char * volatile *>(&s->ptr->buf_ptr);
+    if (s->ptr->signal_snapshot_buf_ptr == s->ptr->signal_saved_buf_ptr) {
       continue;
     }
     signalled++;
@@ -398,6 +402,16 @@ void MallocTracer::DumpEverything() {
   sem_getvalue(&signal_completions, &val);
   assert(val == 0);
 #endif
+
+  for (MallocTracer::Storage *s = all_tracers; s != NULL; s = s->next) {
+    if (s == &instance) {
+      continue;
+    }
+    if (s->ptr->signal_snapshot_buf_ptr == s->ptr->signal_saved_buf_ptr) {
+      continue;
+    }
+    s->ptr->DumpFromSignalLocked();
+  }
 
   char sync_end_buf[24];
   char *p = sync_end_buf;

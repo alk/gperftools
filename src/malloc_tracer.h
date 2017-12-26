@@ -187,6 +187,7 @@ private:
 
   static void do_setup_tls();
   static void malloc_tracer_destructor(void *arg);
+  void SnapshotFromSignal();
   void DumpFromSignalLocked();
 
   uint64_t thread_id;
@@ -199,6 +200,7 @@ private:
 
   char *buf_ptr;
   char *buf_end;
+  char *signal_snapshot_buf_ptr;
   char *signal_saved_buf_ptr;
   char buf_storage[3072+768+128+8+64];
   // sizeof(MallocTracer) == 4024
