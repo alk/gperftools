@@ -101,7 +101,6 @@
 /realloc_debug_unittest
 /realloc_unittest
 /realloc_unittest.exe
-/replay
 /sampler_debug_test
 /sampler_test
 /sampling_debug_test
@@ -144,7 +143,6 @@
 /tcmalloc_unittest
 /tcmalloc_unittest.sh
 /test-driver
-/test_dump
 /thread_dealloc_unittest
 /thread_dealloc_unittest.exe
 /unwind_bench
