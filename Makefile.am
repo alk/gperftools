@@ -803,7 +803,8 @@ libtcmalloc_minimal_tracing_la_CFLAGS =   -DNO_TCMALLOC_SAMPLES \
                                           $(PTHREAD_CFLAGS) -DNDEBUG $(AM_CFLAGS)
 # version_info gets passed to libtool
 libtcmalloc_minimal_tracing_la_LDFLAGS = $(libtcmalloc_minimal_la_LDFLAGS) \
-                                       -version-info @TCMALLOC_SO_VERSION@
+                                       -version-info @TCMALLOC_SO_VERSION@ \
+                                       $(PTHREAD_LIBS)
 libtcmalloc_minimal_tracing_la_LIBADD = $(libtcmalloc_minimal_la_LIBADD)
 
 LIBS_TO_WEAKEN += libtcmalloc_minimal_debug.la

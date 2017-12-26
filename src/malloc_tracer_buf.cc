@@ -185,17 +185,7 @@ static void *saver_thread(void *__dummy) {
     char *p = buf;
     p += snprintf(p, buf + sizeof(buf) - p,
                   "total_saved = %llu\n", (unsigned long long)total_saved);
-    // p += snprintf(p, buf + sizeof(buf) - p,
-    //               "total_written = %llu\n", (unsigned long long)total_written);
-    // p += snprintf(p, buf + sizeof(buf) - p,
-    //               "total_saved = %llu (%g%%)\n", (unsigned long long)total_saved,
-    //          100.0 * total_saved / total_written);
-    // p += snprintf(p, buf + sizeof(buf) - p,
-    //               "token_counter = %llu\n", (unsigned long long)token_counter);
-    // p += snprintf(p, buf + sizeof(buf) - p,
-    //               "thread_id_counter = %llu\n", (unsigned long long)thread_id_counter);
-    // p += snprintf(p, buf + sizeof(buf) - p,
-    //               "thread_dump_written = %llu\n", (unsigned long long)thread_dump_written);
+    MallocTracer::SPrintStats(p, buf + sizeof(buf));
     printf("%s", buf);
     must_write_to_fd(buf, sizeof(buf));
   }

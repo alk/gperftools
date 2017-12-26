@@ -166,6 +166,8 @@ public:
     pthread_t t;
   };
 
+  static void SPrintStats(char* start, char* end);
+
 private:
   friend void dump_signal_handler(int);
 

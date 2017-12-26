@@ -65,7 +65,6 @@ static const uint64_t kTSMask = ~((1ULL << kTSShift) - 1);
 
 static uint64_t token_counter;
 static uint64_t thread_id_counter;
-
 static uint64_t thread_dump_written;
 
 static uint64_t base_ts;
@@ -450,3 +449,13 @@ static void finalize_buf() {
 REGISTER_MODULE_DESTRUCTOR(tracer_deinit, do {
   finalize_buf();
 } while (0));
+
+void MallocTracer::SPrintStats(char* start, char* end) {
+  snprintf(start, end - start,
+           "token_counter = %llu\n"
+           "thread_id_counter = %llu\n"
+           "thread_dump_written = %llu\n",
+           (unsigned long long)token_counter,
+           (unsigned long long)thread_id_counter,
+           (unsigned long long)thread_dump_written);
+}
