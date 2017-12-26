@@ -795,7 +795,6 @@ libtcmalloc_minimal_tracing_la_SOURCES =  src/tracingallocation.cc \
                                           src/malloc_tracer.cc \
                                           src/malloc_tracer_buf.h \
                                           src/malloc_tracer_buf.cc \
-                                          src/crc32c.c \
                                           $(TCMALLOC_MINIMAL_INCLUDES)
 libtcmalloc_minimal_tracing_la_CXXFLAGS = -DNO_TCMALLOC_SAMPLES \
                                           $(PTHREAD_CFLAGS) -DNDEBUG $(AM_CXXFLAGS)
