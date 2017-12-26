@@ -31,6 +31,7 @@
 #ifndef MALLOC_TRACER_BUF_H
 #define MALLOC_TRACER_BUF_H
 #include <string.h>
+#include <stdlib.h>
 
 #include "internal_logging.h"
 
@@ -58,7 +59,7 @@ struct TracerBuffer {
 
 protected:
   virtual ~TracerBuffer();
-  TracerBuffer() : current(0), limit(0) {}
+  TracerBuffer() : current(NULL), limit(NULL) {}
 
   char* current;
   char* limit;
