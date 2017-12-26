@@ -117,7 +117,6 @@ static void *saver_thread(void *__dummy) {
     if (to_save == 0) {
       break;
     }
-    // printf("saving %d for %lld\n", bufno, (long long)to_save);
 
     char *save_buf = fd_buf[bufno];
 
@@ -260,8 +259,6 @@ public:
   virtual bool IsFullySetup();
 
   void SetBuffer(char *buffer, size_t used, size_t size) {
-    // printf("SetBuffer(%p(%d), %zu, %zu)\n",
-    //        buffer, (fd_buf[1] == buffer) ? 1 : (fd_buf[0] == buffer) ? 0 : -1, used, size);
     start = buffer;
     current = buffer + used;
     limit = buffer + size;
