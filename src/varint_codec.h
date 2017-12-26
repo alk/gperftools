@@ -63,8 +63,8 @@ public:
     return (val >> 1) ^ (0 - sign);
   }
 
-  static DecodeResult<uint64_t> decode_unsigned(char *place);
-  static DecodeResult<int64_t> decode_signed(char *place);
+  static DecodeResult<uint64_t> decode_unsigned(const char *place);
+  static DecodeResult<int64_t> decode_signed(const char *place);
 
 private:
   static __attribute__ ((visibility("internal")))  unsigned char encode_bits[64];
@@ -116,16 +116,16 @@ inline char *VarintCodec::encode_unsigned(char *place, uint64_t val) {
   return place + bits + 1;
 }
 
-inline VarintCodec::DecodeResult<int64_t> VarintCodec::decode_signed(char *place) {
+inline VarintCodec::DecodeResult<int64_t> VarintCodec::decode_signed(const char *place) {
   DecodeResult<uint64_t> t = decode_unsigned(place);
   int64_t val = static_cast<int64_t>(t.value >> 1);
   val ^= -static_cast<int64_t>(t.value & 1);
   return DecodeResult<int64_t>::make(t.advance, val);
 }
 
-inline VarintCodec::DecodeResult<uint64_t> VarintCodec::decode_unsigned(char *place)
+inline VarintCodec::DecodeResult<uint64_t> VarintCodec::decode_unsigned(const char *place)
 {
-  uint64_t val = *(uint64_t *)place;
+  uint64_t val = *reinterpret_cast<const uint64_t *>(place);
 
   if (__builtin_expect(val & 1, 1)) {
     return DecodeResult<uint64_t>::make(1, (val & 0xff) >> 1);
