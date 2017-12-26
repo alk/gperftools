@@ -55,7 +55,6 @@
 static const int kDumperPeriodMicros = 3000;
 
 static SpinLock lock(base::LINKER_INITIALIZED);
-static SpinLock signal_lock(base::LINKER_INITIALIZED);
 
 static const int dump_signal = std::max(std::min(0x35, SIGRTMAX), SIGRTMIN);
 
@@ -148,7 +147,6 @@ void MallocTracer::do_setup_tls() {
   malloc_tracer_allocator.Init();
   int rv = pthread_key_create(&instance_key, &MallocTracer::malloc_tracer_destructor);
   if (rv) {
-    // TODO
     abort();
   }
 
@@ -365,8 +363,6 @@ void MallocTracer::DumpEverything() {
   SpinLockHolder h(&lock);
 
   if (instance.ptr) {
-    assert(!signal_lock.IsHeld());
-
     assert(instance.t == pthread_self());
     instance.ptr->SnapshotFromSignal();
     instance.ptr->DumpFromSignalLocked();
