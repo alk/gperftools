@@ -44,12 +44,6 @@
 #include <netdb.h>
 #include <sys/un.h>
 
-// #undef USE_SNAPPY
-
-#ifdef USE_SNAPPY
-#include <snappy-c.h>
-#endif
-
 #include "malloc_tracer.h"
 #include "malloc_tracer_buf.h"
 
@@ -87,28 +81,12 @@ static uint64_t total_saved;
 
 static bool fully_setup;
 
-#ifdef USE_SNAPPY
-static char snappy_buf[FD_BUF_SIZE*2] __attribute__((aligned(4096)));
-static int snappy_tail;
-static unsigned char snappy_header[] = {0xff, 0x06, 0x00, 0x00, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59};
-
-extern "C" void tcmalloc_tracing_crc32c_init(void);
-extern "C" uint32_t tcmalloc_tracing_crc32c(uint32_t crc, const void *buf, size_t len);
-
-#endif
-
 static sem_t saver_thread_sem;
 
 static void *saver_thread(void *__dummy) {
   MallocTracer::GetInstance();
   MallocTracer::ExcludeCurrentThreadDumping();
   sem_post(&saver_thread_sem);
-
-#ifdef USE_SNAPPY
-  memcpy(snappy_buf, snappy_header, sizeof(snappy_header));
-  snappy_tail = sizeof(snappy_header);
-  tcmalloc_tracing_crc32c_init();
-#endif
 
   int bufno = 0;
   while (true) {
@@ -120,63 +98,14 @@ static void *saver_thread(void *__dummy) {
 
     char *save_buf = fd_buf[bufno];
 
-#ifdef USE_SNAPPY
-    uint32_t crc = tcmalloc_tracing_crc32c(0, save_buf, to_save);
-    crc = ((crc >> 15) | (crc << 17)) + 0xa282ead8;
-
-    char *len_ptr = snappy_buf + snappy_tail;
-    snappy_tail += 4;
-
-    memcpy(snappy_buf + snappy_tail, &crc, sizeof(crc));
-    snappy_tail += 4;
-
-    size_t compressed_size = sizeof(snappy_buf) - snappy_tail;
-    snappy_status st = snappy_compress(save_buf, to_save,
-                                       snappy_buf + snappy_tail,
-                                       &compressed_size);
-    if (st != SNAPPY_OK) {
-      printf("st = %d\n", st);
-      abort();
-    }
-
-    // least significant byte of 0 means it is compressed block
-    uint32_t len = (compressed_size + 4) << 8;
-    memcpy(len_ptr, &len, sizeof(len));
-
-    to_save = snappy_tail + compressed_size;
-    save_buf = snappy_buf;
-
-    snappy_tail = to_save & 4095;
-    to_save &= -4096;
-#else
     // last buffer can be not full 4k. So just round up
     to_save = (to_save + 4095) & -4096;
-#endif
 
     must_write_to_fd(save_buf, to_save);
-#ifdef USE_SNAPPY
-    if (to_save != 0) {
-      memcpy(snappy_buf, snappy_buf + to_save, snappy_tail);
-    }
-#endif
     total_saved += to_save;
     sem_post(space_sem + bufno);
     bufno = (bufno + 1) % 2;
   }
-
-#ifdef USE_SNAPPY
-  if (snappy_tail) {
-    int new_tail = (snappy_tail + 4 + 4095) & -4096;
-    memset(snappy_buf + snappy_tail, 0, new_tail - snappy_tail);
-    uint32_t padding_len = new_tail - snappy_tail;
-    padding_len <<= 8;
-    padding_len |= 0xfe;
-    memcpy(snappy_buf + snappy_tail, &padding_len, sizeof(padding_len));
-
-    must_write_to_fd(snappy_buf, new_tail);
-    total_saved += new_tail;
-  }
-#endif
 
   {
     char buf[4096] __attribute__((aligned(4096)));
