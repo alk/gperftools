@@ -57,10 +57,11 @@ struct TracerBuffer {
   static TracerBuffer* GetInstance();
 
 protected:
-  char* current{};
-  char* limit{};
-
   virtual ~TracerBuffer();
+  TracerBuffer() : current(0), limit(0) {}
+
+  char* current;
+  char* limit;
 };
 
 #endif

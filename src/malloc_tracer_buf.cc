@@ -269,13 +269,14 @@ public:
 
   void RefreshInternal(int to_write);
 
-  char *start{};
+  char *start;
 
 private:
   ~ActualTracerBuffer() {}
 };
 
 ActualTracerBuffer::ActualTracerBuffer() {
+  start = NULL;
   SetBuffer(fd_buf[0], 0, FD_BUF_SIZE);
 }
 
