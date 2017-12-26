@@ -331,18 +331,17 @@ void MallocTracer::RefreshTokenAndDec() {
   token_base = base;
   counter = kTokenSize;
 
-  if (!HasSpaceFor(3)) {
+  if (!HasSpaceFor(2)) {
     RefreshBuffer(0, 0, 0);
   }
 
   char *p = buf_ptr;
 
-  EventsEncoder::triple enc =
-    EventsEncoder::encode_token(thread_id, ts_and_cpu(), base - kTokenSize);
+  EventsEncoder::pair enc =
+    EventsEncoder::encode_token(base - kTokenSize, ts_and_cpu());
 
   p = VarintCodec::encode_unsigned(p, enc.first);
-  p = VarintCodec::encode_unsigned(p, enc.second.first);
-  p = VarintCodec::encode_unsigned(p, enc.second.second);
+  p = VarintCodec::encode_unsigned(p, enc.second);
 
   SetBufPtr(p);
 }

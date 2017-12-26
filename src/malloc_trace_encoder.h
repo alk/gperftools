@@ -128,10 +128,10 @@ struct EventsEncoder {
                           std::make_pair(ts_and_cpu, size));
   }
 
-  static triple encode_token(uint64_t thread_id,
-                             uint64_t ts_and_cpu, uint64_t token_base) {
-    return std::make_pair((thread_id << kTypeShift) | kEventTok,
-                          std::make_pair(ts_and_cpu, token_base));
+  static pair encode_token(uint64_t token_base,
+                           uint64_t ts_and_cpu) {
+    return std::make_pair((token_base << kTypeShift) | kEventTok,
+                          ts_and_cpu);
   }
 
   static pair encode_death(uint64_t thread_id,
@@ -220,13 +220,11 @@ struct EventsEncoder {
     b->size = third_word;
   }
 
-  // TODO: drop thread_id from this event encoding
   template <typename T>
   static void decode_token(T *t,
-                           uint64_t first_word, uint64_t second_word, uint64_t third_word) {
-    t->thread_id = first_word >> kTypeShift;
+                           uint64_t first_word, uint64_t second_word) {
+    t->token_base = first_word >> kTypeShift;
     unbundle_ts_and_cpu(second_word, &t->ts, &t->cpu);
-    t->token_base = third_word;
   }
 
   template <typename T>
