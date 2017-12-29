@@ -171,8 +171,6 @@ public:
   static void SPrintStats(char* start, char* end);
 
 private:
-  friend void dump_signal_handler(int);
-
   MallocTracer(uint64_t _thread_id);
 
   void SetBufPtr(char *new_value) {
@@ -193,7 +191,6 @@ private:
 
   static void do_setup_tls();
   static void malloc_tracer_destructor(void *arg);
-  void SnapshotFromSignal();
   void DumpFromSignalLocked();
 
   uint64_t thread_id;
