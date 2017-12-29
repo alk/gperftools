@@ -38,7 +38,7 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <semaphore.h>
-#include <signal.h>
+// #include <signal.h>
 
 #include <sys/socket.h>
 #include <netdb.h>
@@ -74,7 +74,7 @@ static const int kDumperPeriodMicros = 3000;
 
 static SpinLock lock(base::LINKER_INITIALIZED);
 
-static const int dump_signal = std::max(std::min(0x35, SIGRTMAX), SIGRTMIN);
+// static const int dump_signal = std::max(std::min(0x35, SIGRTMAX), SIGRTMIN);
 
 static const int kTokenSize = 4 << 10;
 static const int kTSShift = 10;
@@ -99,7 +99,7 @@ static tcmalloc::PageHeapAllocator<MallocTracer> malloc_tracer_allocator;
 
 static TracerBuffer* tracer_buffer;
 
-static sem_t signal_completions;
+// static sem_t signal_completions;
 static bool no_more_writes;
 
 static union {
@@ -168,19 +168,19 @@ void MallocTracer::do_setup_tls() {
     abort();
   }
 
-  sem_init(&signal_completions, 0, 0);
+  // sem_init(&signal_completions, 0, 0);
 
   in_setup = false;
 }
 
-void dump_signal_handler(int sig) {
-  int saved_errno = errno;
+// void dump_signal_handler(int sig) {
+//   int saved_errno = errno;
 
-  MallocTracer::instance.ptr->SnapshotFromSignal();
-  sem_post(&signal_completions);
+//   MallocTracer::instance.ptr->SnapshotFromSignal();
+//   sem_post(&signal_completions);
 
-  errno = saved_errno;
-}
+//   errno = saved_errno;
+// }
 
 static void *dumper_thread(void *__dummy) {
   while (true) {
@@ -191,16 +191,18 @@ static void *dumper_thread(void *__dummy) {
 }
 
 static void malloc_tracer_setup_tail() {
-  struct sigaction sa;
-  memset(&sa, 0, sizeof(sa));
-  sa.sa_handler = dump_signal_handler;
-  sa.sa_flags = SA_RESTART;
-  int rv = sigaction(dump_signal, &sa, NULL);
-  if (rv != 0) {
-    perror("sigaction");
-    printf("min = %x, max = %x\n", SIGRTMIN, SIGRTMAX);
-    abort();
-  }
+  int rv;
+
+  // struct sigaction sa;
+  // memset(&sa, 0, sizeof(sa));
+  // sa.sa_handler = dump_signal_handler;
+  // sa.sa_flags = SA_RESTART;
+  // rv = sigaction(dump_signal, &sa, NULL);
+  // if (rv != 0) {
+  //   perror("sigaction");
+  //   printf("min = %x, max = %x\n", SIGRTMIN, SIGRTMAX);
+  //   abort();
+  // }
 
   pthread_t dumper;
   rv = pthread_create(&dumper, 0, dumper_thread, 0);
@@ -369,6 +371,18 @@ void MallocTracer::RefreshToken() {
   counter++;
 }
 
+static void process_wide_barrier() {
+  // TODO: in google3 I am sure I'll be asked to use rseq barrier
+  // syscall
+  static volatile char a_page[4096] __attribute__((aligned(4096)));
+  // first touch page
+  a_page[0] &= 0xff;
+  // and then tell it to go away. This will trigger IPI to all cores
+  // running this process' mm for tlb flush and wait for
+  // completion. Causing memory barriers everywhere.
+  madvise(const_cast<char*>(a_page), 4096, MADV_DONTNEED);
+}
+
 void MallocTracer::DumpEverything() {
   TracerBuffer* tracer_buffer = TracerBuffer::GetInstance();
   if (!tracer_buffer->IsFullySetup()) {
@@ -383,36 +397,40 @@ void MallocTracer::DumpEverything() {
     instance.ptr->DumpFromSignalLocked();
   }
 
-  int signalled = 0;
+  // int signalled = 0;
   for (MallocTracer::Storage *s = all_tracers; s != NULL; s = s->next) {
     if (s == &instance) {
       continue;
     }
     // benign race here, reading buf_ptr
     s->ptr->signal_snapshot_buf_ptr = *const_cast<char * volatile *>(&s->ptr->buf_ptr);
-    if (s->ptr->signal_snapshot_buf_ptr == s->ptr->signal_saved_buf_ptr) {
-      continue;
-    }
-    signalled++;
-    int rv = pthread_kill(s->t, dump_signal);
-    if (rv != 0) {
-      errno = rv;
-      perror("pthread_kill");
-      abort();
-    }
+    // if (s->ptr->signal_snapshot_buf_ptr == s->ptr->signal_saved_buf_ptr) {
+    //   continue;
+    // }
+    // signalled++;
+    // int rv = pthread_kill(s->t, dump_signal);
+    // if (rv != 0) {
+    //   errno = rv;
+    //   perror("pthread_kill");
+    //   abort();
+    // }
   }
 
-  // yes we need to hold the lock across all signal handler
-  // executions. Because signal handlers assume they have the lock
-  for (; signalled > 0; signalled--) {
-    sem_wait(&signal_completions);
-  }
+  // ensure that we're able to see all the data written up to
+  // signal_snapshot_buf_ptr of all threads
+  process_wide_barrier();
 
-#ifndef NDEBUG
-  int val = 0;
-  sem_getvalue(&signal_completions, &val);
-  assert(val == 0);
-#endif
+//   // yes we need to hold the lock across all signal handler
+//   // executions. Because signal handlers assume they have the lock
+//   for (; signalled > 0; signalled--) {
+//     sem_wait(&signal_completions);
+//   }
+
+// #ifndef NDEBUG
+//   int val = 0;
+//   sem_getvalue(&signal_completions, &val);
+//   assert(val == 0);
+// #endif
 
   for (MallocTracer::Storage *s = all_tracers; s != NULL; s = s->next) {
     if (s == &instance) {
@@ -447,10 +465,10 @@ MallocTracer::~MallocTracer() {
   char *p = buf_ptr;
   EventsEncoder::pair enc = EventsEncoder::encode_death(thread_id, ts_and_cpu());
   p = VarintCodec::encode_unsigned(p, enc.first);
-  SetBufPtr(VarintCodec::encode_unsigned(p, enc.second));
+  p = VarintCodec::encode_unsigned(p, enc.second);
 
   SpinLockHolder h(&lock);
-  append_buf_locked(buf_storage, buf_ptr - buf_storage);
+  append_buf_locked(buf_storage, p - buf_storage);
 }
 
 static void finalize_buf() {

@@ -179,7 +179,7 @@ static void do_setup_tail() {
   base::subtle::Release_Store(&fully_setup, 1);
 }
 
-REGISTER_MODULE_INITIALIZER(setup_tail, do_setup_tail());
+REGISTER_MODULE_INITIALIZER(setup_buf_tail, do_setup_tail());
 
 class ActualTracerBuffer : public TracerBuffer {
 public:
