@@ -54,6 +54,22 @@
 
 namespace tcmalloc {
 
+const unsigned EventsEncoder::kEventMalloc;
+const unsigned EventsEncoder::kEventFree;
+const unsigned EventsEncoder::kEventTok;
+const unsigned EventsEncoder::kEventBuf;
+const unsigned EventsEncoder::kEventFreeSized;
+const unsigned EventsEncoder::kEventExtBase;
+const unsigned EventsEncoder::kTypeShift;
+const unsigned EventsEncoder::kTypeMask;
+const unsigned EventsEncoder::kEventDeath;
+const unsigned EventsEncoder::kEventEnd;
+const unsigned EventsEncoder::kEventRealloc;
+const unsigned EventsEncoder::kEventMemalign;
+const unsigned EventsEncoder::kEventSyncBarrier;
+const unsigned EventsEncoder::kExtTypeShift;
+const unsigned EventsEncoder::kExtTypeMask;
+
 static const int kDumperPeriodMicros = 3000;
 
 static SpinLock lock(base::LINKER_INITIALIZED);
