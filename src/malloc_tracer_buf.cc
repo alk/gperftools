@@ -52,11 +52,14 @@
 
 namespace tcmalloc {
 
-#define FD_BUF_SIZE (32 << 20)
+#define FD_BUF_SIZE (16 << 20)
+#define BUFS_COUNT 4
 
-static char fd_buf[2][FD_BUF_SIZE] __attribute__((aligned(4096)));
+static char fd_buf[BUFS_COUNT][FD_BUF_SIZE] __attribute__((aligned(4096)));
 static int write_buf;
-static int to_save_pos[2];
+static int to_save_pos[BUFS_COUNT];
+static sem_t space_sem[BUFS_COUNT];
+static sem_t ready_sem[BUFS_COUNT];
 
 static int fd;
 
@@ -78,8 +81,6 @@ static void must_write_to_fd(const char* buf, int bytes) {
   } while (bytes > 0);
 }
 
-static sem_t space_sem[2];
-static sem_t ready_sem[2];
 static uint64_t total_saved;
 
 static AtomicWord fully_setup;
@@ -107,7 +108,7 @@ static void *saver_thread(void *__dummy) {
     must_write_to_fd(save_buf, to_save);
     total_saved += to_save;
     sem_post(space_sem + bufno);
-    bufno = (bufno + 1) % 2;
+    bufno = (bufno + 1) % BUFS_COUNT;
   }
 
   {
@@ -123,8 +124,9 @@ static void *saver_thread(void *__dummy) {
 
   close(fd);
 
-  sem_post(space_sem + bufno);
-  sem_post(space_sem + (bufno + 1) % 2);
+  for (int i = 0; i < BUFS_COUNT; i++) {
+    sem_post(space_sem + (bufno + i) % BUFS_COUNT);
+  }
 
   return 0;
 }
@@ -211,7 +213,7 @@ ActualTracerBuffer::ActualTracerBuffer() {
 void ActualTracerBuffer::RefreshInternal(int to_write) {
   int tail = current - start - to_write;
 
-  int next_buf = (write_buf + 1) % 2;
+  int next_buf = (write_buf + 1) % BUFS_COUNT;
   sem_wait(space_sem + next_buf);
 
   memcpy(fd_buf[next_buf], fd_buf[write_buf] + to_write, tail);
@@ -233,8 +235,9 @@ void ActualTracerBuffer::Finalize() {
   RefreshInternal(0);
 
   // and wait until it is done
-  sem_wait(space_sem + (write_buf + 1) % 2);
-  sem_wait(space_sem + (write_buf + 2) % 2);
+  for (int i = 0; i < BUFS_COUNT; i++) {
+    sem_wait(space_sem + (write_buf + i) % BUFS_COUNT);
+  }
 }
 
 bool ActualTracerBuffer::IsFullySetup() {
@@ -254,10 +257,10 @@ TracerBuffer* TracerBuffer::GetInstance() {
   static int initialized;
 
   if (!initialized) {
-    sem_init(space_sem + 0, 0, 1);
-    sem_init(space_sem + 1, 0, 1);
-    sem_init(ready_sem + 0, 0, 0);
-    sem_init(ready_sem + 1, 0, 0);
+    for (int i = 0; i < BUFS_COUNT; i++) {
+      sem_init(space_sem + i, 0, 1);
+      sem_init(ready_sem + i, 0, 0);
+    }
 
     new (&space) ActualTracerBuffer();
     initialized = true;
