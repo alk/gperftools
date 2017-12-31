@@ -27,6 +27,7 @@
 // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#include "config.h"
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -43,6 +44,10 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <sys/un.h>
+
+#if USE_LZ4
+#include <lz4frame.h>
+#endif
 
 #include "malloc_tracer.h"
 #include "malloc_tracer_buf.h"
@@ -61,36 +66,139 @@ static int to_save_pos[BUFS_COUNT];
 static sem_t space_sem[BUFS_COUNT];
 static sem_t ready_sem[BUFS_COUNT];
 
-static int fd;
-
-static void must_write_to_fd(const char* buf, int bytes) {
-  if (fd < 0) {
-    return;
-  }
-  do {
-    int rv = write(fd, buf, bytes);
-    if (rv < 0) {
-      if (errno != EINTR) {
-        perror("write");
-        abort();
-      }
-      rv = 0;
-    }
-    bytes -= rv;
-    buf += rv;
-  } while (bytes > 0);
-}
-
 static uint64_t total_saved;
 
 static AtomicWord fully_setup;
 
+class Writer {
+public:
+  virtual ~Writer() {}
+
+  virtual void Write(const char* data, size_t amount) = 0;
+  virtual void WriteLast(const char* data, size_t amount) = 0;
+};
+
+class DirectWriter : public Writer {
+public:
+  DirectWriter(int fd) : fd_(fd) {}
+  ~DirectWriter() {}
+
+  void Write(const char* buf, size_t bytes) {
+    if (fd_ < 0) {
+      return;
+    }
+    do {
+      int rv = write(fd_, buf, bytes);
+      if (rv < 0) {
+        if (errno != EINTR) {
+          perror("write");
+          abort();
+        }
+        rv = 0;
+      }
+      bytes -= rv;
+      buf += rv;
+    } while (bytes > 0);
+  }
+  void WriteLast(const char* data, size_t amount) {
+    Write(data, (amount+4095) & ~size_t(4095));
+    close(fd_);
+  }
+
+private:
+  int fd_;
+};
+
+#if USE_LZ4
+
+class LZ4Compressor : public Writer {
+public:
+  LZ4Compressor(Writer* slave);
+  ~LZ4Compressor();
+
+  void Write(const char* data, size_t amount);
+  void WriteLast(const char* data, size_t amount);
+
+private:
+  char buffer_[4<<20] __attribute__((aligned(4096)));
+  static const int kMinAmountToSave = 3 << 20;
+  static const int kBlockSize = 16 << 10;
+  int buf_tail_;
+  LZ4F_cctx* lzctx_;
+  Writer* const slave_;
+};
+
+const int LZ4Compressor::kBlockSize;
+const int LZ4Compressor::kMinAmountToSave;
+
+LZ4Compressor::LZ4Compressor(Writer* slave) : buf_tail_(0), slave_(slave) {
+  LZ4F_errorCode_t err = LZ4F_createCompressionContext(&lzctx_, LZ4F_VERSION);
+  if (err != 0) {
+    abort();
+  }
+
+  LZ4F_preferences_t prefs;
+  memset(&prefs, 0, sizeof(prefs));
+  prefs.frameInfo.blockMode = LZ4F_blockIndependent;
+
+  buf_tail_ = LZ4F_compressBegin(lzctx_, buffer_, sizeof(buffer_), &prefs);
+}
+
+LZ4Compressor::~LZ4Compressor() {
+  LZ4F_freeCompressionContext(lzctx_);
+}
+
+void LZ4Compressor::Write(const char* data, size_t amount) {
+  while (amount > 0) {
+    size_t this_write = kBlockSize;
+    if (this_write > amount) {
+      this_write = amount;
+    }
+    size_t written = LZ4F_compressUpdate(lzctx_,
+                                         buffer_ + buf_tail_,
+                                         sizeof(buffer_) - buf_tail_,
+                                         data, this_write,
+                                         NULL);
+    if (LZ4F_isError(written)) {
+      abort();
+    }
+
+    buf_tail_ += written;
+    data += this_write;
+    amount -= this_write;
+
+    if (buf_tail_ >= kMinAmountToSave) {
+      int to_save = buf_tail_ & ~4095;
+      slave_->Write(buffer_, to_save);
+      buf_tail_ -= to_save;
+      memcpy(buffer_, buffer_ + to_save, buf_tail_);
+    }
+  }
+}
+
+void LZ4Compressor::WriteLast(const char* data, size_t amount) {
+  Write(data, amount);
+
+  size_t written = LZ4F_compressEnd(lzctx_, buffer_ + buf_tail_,
+                                    sizeof(buffer_) - buf_tail_, NULL);
+  if (LZ4F_isError(written)) {
+    abort();
+  }
+  buf_tail_ += written;
+
+  slave_->WriteLast(buffer_, buf_tail_);
+}
+
+#endif // USE_LZ4
+
 static sem_t saver_thread_sem;
 
-static void *saver_thread(void *__dummy) {
+static void *saver_thread(void *_arg) {
   MallocTracer::GetInstance();
   MallocTracer::ExcludeCurrentThreadDumping();
   sem_post(&saver_thread_sem);
+
+  Writer* writer = reinterpret_cast<Writer*>(_arg);
 
   int bufno = 0;
   while (true) {
@@ -105,24 +213,26 @@ static void *saver_thread(void *__dummy) {
     // last buffer can be not full 4k. So just round up
     to_save = (to_save + 4095) & -4096;
 
-    must_write_to_fd(save_buf, to_save);
+    if (writer) {
+      writer->Write(save_buf, to_save);
+    }
     total_saved += to_save;
     sem_post(space_sem + bufno);
     bufno = (bufno + 1) % BUFS_COUNT;
   }
 
+  if (writer) {
+    writer->WriteLast(NULL, 0);
+  }
+
   {
-    char buf[4096] __attribute__((aligned(4096)));
-    memset(buf, 0, sizeof(buf));
+    char buf[4096];
     char *p = buf;
     p += snprintf(p, buf + sizeof(buf) - p,
                   "total_saved = %llu\n", (unsigned long long)total_saved);
     MallocTracer::SPrintStats(p, buf + sizeof(buf));
-    printf("%s", buf);
-    must_write_to_fd(buf, sizeof(buf));
+    fprintf(stderr, "%s", buf);
   }
-
-  close(fd);
 
   for (int i = 0; i < BUFS_COUNT; i++) {
     sem_post(space_sem + (bufno + i) % BUFS_COUNT);
@@ -131,22 +241,22 @@ static void *saver_thread(void *__dummy) {
   return 0;
 }
 
-static void open_trace_output() {
-  fd = -1;
+static Writer* open_trace_output() {
+  int fd = -1;
 
   char *filename = getenv("TCMALLOC_TRACE_OUTPUT");
   if (filename == NULL) {
-    return;
+    return NULL;
   }
 
   unsetenv("TCMALLOC_TRACE_OUTPUT");
 
   // O_NONBLOCK is for named pipes
-  fd = open(filename, O_WRONLY|O_CREAT|O_NONBLOCK, 0644);
+  fd = open(filename, O_WRONLY|O_CREAT|O_NONBLOCK|O_TRUNC, 0644);
   if (fd < 0) {
     perror("open");
     fprintf(stderr, "will not save trace anywhere\n");
-    return;
+    return NULL;
   }
 
   int flags = fcntl(fd, F_GETFL);
@@ -161,16 +271,28 @@ static void open_trace_output() {
 
   // if output is pipe, we need larger buffer
   fcntl(fd, F_SETPIPE_SZ, 1 << 20);
+
+  Writer* direct_writer = new DirectWriter(fd);
+
+#if USE_LZ4
+  if (getenv("TCMALLOC_TRACE_UNCOMPRESSED")) {
+    return direct_writer;
+  }
+  return new LZ4Compressor(direct_writer);
+
+#else
+  return direct_writer;
+#endif
 }
 
 static void do_setup_tail() {
   (void)TracerBuffer::GetInstance();
 
-  open_trace_output();
+  Writer* writer = open_trace_output();
 
   sem_init(&saver_thread_sem, 0, 0);
   pthread_t saver;
-  int rv = pthread_create(&saver, 0, saver_thread, 0);
+  int rv = pthread_create(&saver, 0, saver_thread, writer);
   if (rv != 0) {
     errno = rv;
     perror("pthread_create");

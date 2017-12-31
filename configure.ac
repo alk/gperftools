@@ -419,6 +419,29 @@ else
   AC_SUBST(ac_cv_have_std_align_val_t, 0)
 fi
 
+AC_ARG_ENABLE([trace-compression],
+        [whether to compress malloc trace via lz4],
+        [enable_lz4=$enableval], [enable_lz4=no])
+
+LZ4_LIBS=
+save_LIBS=$LIBS
+missing_lz4=no
+AS_IF([test "x$enable_lz4" = xyes],
+      [AC_SEARCH_LIBS([LZ4F_getVersion], [lz4],
+       [AC_LINK_IFELSE(
+         [AC_LANG_PROGRAM(
+           [[#include <lz4frame.h>]], [[&LZ4F_getVersion]])],
+       dnl success
+       [LZ4_LIBS=$LIBS
+        AC_DEFINE([USE_LZ4], 1, [Compress traces with LZ4])],
+       [missing_lz4=1])], dnl AC_LINK_IFELSE failure, missing header perhaps
+       [missing_lz4=1])]) dnl AC_SEARCH_LIBS failure
+
+LIBS=$save_LIBS
+AC_SUBST(LZ4_LIBS)
+
+AS_IF([test "x$missing_lz4" = xyes],
+      [AC_MSG_ERROR([-llz4 not found])])
 
 AC_CACHE_CHECK([if target has _Unwind_Backtrace],
                [perftools_cv_have_unwind_backtrace],
