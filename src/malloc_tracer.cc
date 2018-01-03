@@ -339,7 +339,7 @@ void MallocTracer::RefreshToken() {
 }
 
 static void process_wide_barrier() {
-  // TODO: in google3 I am sure I'll be asked to use rseq barrier
+  // TODO: use membarrier or google-only rseq barrier
   // syscall
   static volatile char a_page[4096] __attribute__((aligned(4096)));
   // first touch page
