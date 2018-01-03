@@ -54,12 +54,29 @@
 
 #include "base/googleinit.h"
 #include "base/atomicops.h"
+#include "internal_logging.h"
 
 namespace tcmalloc {
 
 #define FD_BUF_SIZE (16 << 20)
 #define BUFS_COUNT 4
 
+// Buffer lifecycle is as follows:
+//
+//  a) space_sem = 0, ready_sem = 0: buffer is actively being written
+//  to by TracerBuffer. write_buf has index of buffer
+//
+//  b) space_sem = 0, ready_sem = 1: buffer is ready to be saved
+//  to_save_pos represents amount of data in buffer. Which is multiple
+//  of page size (except for very last data).
+//
+//  c) space_sem = 0, ready_sem = 0: once saver sem_wait's ready_sem
+//  it is saving that buffer.
+//
+//  d) space_sem = 1, ready_sem = 0: once saver is done, it posts to
+//  space_sem, which represents that the buffer is ready to be filled
+//  again.
+//
 static char fd_buf[BUFS_COUNT][FD_BUF_SIZE] __attribute__((aligned(4096)));
 static int write_buf;
 static int to_save_pos[BUFS_COUNT];
@@ -234,9 +251,14 @@ static void *saver_thread(void *_arg) {
     fprintf(stderr, "%s", buf);
   }
 
-  for (int i = 0; i < BUFS_COUNT; i++) {
-    sem_post(space_sem + (bufno + i) % BUFS_COUNT);
-  }
+  // we've hit to_save = 0 case above and exited loop without
+  // signalling buffer emptying. We do it here, signalling that saver
+  // is fully done.
+  sem_post(space_sem + bufno);
+
+  // for (int i = 0; i < BUFS_COUNT; i++) {
+  //   sem_post(space_sem + (bufno + i) % BUFS_COUNT);
+  // }
 
   return 0;
 }
@@ -328,11 +350,13 @@ private:
 };
 
 ActualTracerBuffer::ActualTracerBuffer() {
-  start = NULL;
+  sem_wait(space_sem + 0);
   SetBuffer(fd_buf[0], 0, FD_BUF_SIZE);
 }
 
 void ActualTracerBuffer::RefreshInternal(int to_write) {
+  CHECK_CONDITION(fd_buf[write_buf] == start);
+
   int tail = current - start - to_write;
 
   int next_buf = (write_buf + 1) % BUFS_COUNT;
@@ -356,8 +380,11 @@ void ActualTracerBuffer::Finalize() {
   // signal saver thread that we're done
   RefreshInternal(0);
 
-  // and wait until it is done
-  for (int i = 0; i < BUFS_COUNT; i++) {
+  // and wait until it is done. We're just taking "ownership" of all
+  // buffers. Once we're done, we can be sure that saver cannot be
+  // running and that our last 2 buffers we passed to saver got
+  // through.
+  for (int i = 1; i < BUFS_COUNT; i++) {
     sem_wait(space_sem + (write_buf + i) % BUFS_COUNT);
   }
 }
