@@ -165,7 +165,6 @@ public:
     MallocTracer *ptr;
     Storage **pprev;
     Storage *next;
-    pthread_t t;
   };
 
   static void SPrintStats(char* start, char* end);

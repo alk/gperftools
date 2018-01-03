@@ -110,6 +110,10 @@ static MallocTracer *get_first_tracer() {
 }
 
 void MallocTracer::malloc_tracer_destructor(void *arg) {
+  if (had_tracer) {
+    abort();
+  }
+
   MallocTracer::Storage *instanceptr =
     reinterpret_cast<MallocTracer::Storage *>(arg);
 
@@ -117,7 +121,7 @@ void MallocTracer::malloc_tracer_destructor(void *arg) {
 
   // have pthread call us again on next destruction iteration and give
   // rest of tls destructors chance to get traced properly
-  if (tracer->destroy_count++ < 1) {
+  if (tracer->destroy_count++ < 3) {
     pthread_setspecific(instance_key, instanceptr);
     return;
   }
@@ -207,23 +211,19 @@ MallocTracer *MallocTracer::GetInstanceSlow(void) {
       new (an_instance) MallocTracer(thread_id);
     }
 
-    instance.t = pthread_self();
     instance.ptr = an_instance;
-    instance.next = NULL;
-    instance.pprev = NULL;
+    instance.next = all_tracers;
+    instance.pprev = &all_tracers;
 
-    if (!had_tracer) {
-      instance.pprev = &all_tracers;
-      instance.next = all_tracers;
-
-      if (instance.next) {
-        instance.next->pprev = &instance.next;
-      }
-      all_tracers = &instance;
+    if (instance.next) {
+      instance.next->pprev = &instance.next;
     }
+    all_tracers = &instance;
   }
 
-  pthread_setspecific(instance_key, &instance);
+  if (!had_tracer) {
+    pthread_setspecific(instance_key, &instance);
+  }
 
   return an_instance;
 }
@@ -400,8 +400,11 @@ MallocTracer::~MallocTracer() {
   p = VarintCodec::encode_unsigned(p, enc.first);
   p = VarintCodec::encode_unsigned(p, enc.second);
 
-  SpinLockHolder h(&lock);
-  append_buf_locked(buf_storage, p - buf_storage);
+  {
+    SpinLockHolder h(&lock);
+    append_buf_locked(buf_storage, p - buf_storage);
+  }
+  memset(this, 0xfe, sizeof(*this));
 }
 
 static void finalize_buf() {
