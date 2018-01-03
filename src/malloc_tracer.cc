@@ -180,6 +180,8 @@ static void *dumper_thread(void *__dummy) {
 }
 
 static void malloc_tracer_setup_tail() {
+  (void)MallocTracer::GetInstance();
+
   pthread_t dumper;
   int rv = pthread_create(&dumper, 0, dumper_thread, 0);
   if (rv != 0) {
@@ -352,7 +354,6 @@ static void process_wide_barrier() {
 }
 
 void MallocTracer::DumpEverything() {
-  TracerBuffer* tracer_buffer = TracerBuffer::GetInstance();
   if (!tracer_buffer->IsFullySetup()) {
     return;
   }
