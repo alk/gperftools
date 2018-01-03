@@ -256,10 +256,6 @@ static void *saver_thread(void *_arg) {
   // is fully done.
   sem_post(space_sem + bufno);
 
-  // for (int i = 0; i < BUFS_COUNT; i++) {
-  //   sem_post(space_sem + (bufno + i) % BUFS_COUNT);
-  // }
-
   return 0;
 }
 
