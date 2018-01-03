@@ -386,3 +386,10 @@ MallocExtension_Ownership MallocExtension_GetOwnership(const void* p) {
   return static_cast<MallocExtension_Ownership>(
       MallocExtension::instance()->GetOwnership(p));
 }
+
+extern "C"
+char *MallocExtension_GetHeapSample_malloced() {
+  std::string s;
+  MallocExtension::instance()->GetHeapSample(&s);
+  return strdup(s.c_str());
+}
