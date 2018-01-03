@@ -48,6 +48,7 @@
 #include "page_heap_allocator.h"
 #include "base/spinlock.h"
 #include "base/googleinit.h"
+#include "internal_logging.h"
 #include "malloc_tracer.h"
 #include "malloc_tracer_buf.h"
 
@@ -110,9 +111,7 @@ static MallocTracer *get_first_tracer() {
 }
 
 void MallocTracer::malloc_tracer_destructor(void *arg) {
-  if (had_tracer) {
-    abort();
-  }
+  CHECK_CONDITION(!had_tracer);
 
   MallocTracer::Storage *instanceptr =
     reinterpret_cast<MallocTracer::Storage *>(arg);
@@ -164,9 +163,7 @@ void MallocTracer::do_setup_tls() {
 
   malloc_tracer_allocator.Init();
   int rv = pthread_key_create(&instance_key, &MallocTracer::malloc_tracer_destructor);
-  if (rv) {
-    abort();
-  }
+  CHECK_CONDITION(!rv);
 
   in_setup = false;
 }
@@ -187,7 +184,7 @@ static void malloc_tracer_setup_tail() {
   if (rv != 0) {
     errno = rv;
     perror("pthread_create");
-    abort();
+    CHECK_CONDITION(rv == 0);
   }
 }
 
