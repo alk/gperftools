@@ -77,11 +77,11 @@ inline char *VarintCodec::encode_signed(char *place, int64_t val) {
 
 __attribute__((always_inline))
 inline char *VarintCodec::encode_unsigned(char *place, uint64_t val) {
-  if (__builtin_expect(val < 128ULL, 1)) {
-    val = (val << 1) | 1;
-    *place = val;
-    return place + 1;
-  }
+  // if (__builtin_expect(val < 128ULL, 1)) {
+  //   val = (val << 1) | 1;
+  //   *place = val;
+  //   return place + 1;
+  // }
 
   if (__builtin_expect((val >> 53) != 0, 0)) {
     uint16_t high = val >> 54;
@@ -127,9 +127,9 @@ inline VarintCodec::DecodeResult<uint64_t> VarintCodec::decode_unsigned(const ch
 {
   uint64_t val = *reinterpret_cast<const uint64_t *>(place);
 
-  if (__builtin_expect(val & 1, 1)) {
-    return DecodeResult<uint64_t>::make(1, (val & 0xff) >> 1);
-  }
+  // if (__builtin_expect(val & 1, 1)) {
+  //   return DecodeResult<uint64_t>::make(1, (val & 0xff) >> 1);
+  // }
   // if (val & 3) {
   //   return DecodeResult<uint64_t>::make(place + 2, (val & 0xffff) >> 2);
   // }
