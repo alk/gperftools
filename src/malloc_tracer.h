@@ -182,7 +182,7 @@ private:
 
   void RefreshToken();
   void RefreshTokenAndDec();
-  void RefreshBufferInnerLocked(uint64_t);
+  void RefreshBufferInnerLocked(uint64_t, bool from_saver);
   void RefreshBuffer(int count, uint64_t first, uint64_t second);
 
   static MallocTracer *GetInstanceSlow();
@@ -190,7 +190,8 @@ private:
 
   static void do_setup_tls();
   static void malloc_tracer_destructor(void *arg);
-  void DumpFromSignalLocked();
+
+  void DumpFromSaverThread();
 
   uint64_t thread_id;
 

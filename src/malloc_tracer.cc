@@ -247,18 +247,18 @@ static void append_buf_locked(const char *buf, size_t size) {
   tracer_buffer->AppendData(buf, size);
 }
 
-static inline uint64_t ts_and_cpu() {
+static inline uint64_t ts_and_cpu(bool from_saver) {
   unsigned cpu;
   uint64_t ts = __rdtscp(&cpu) & kTSMask;
   ts -= base_ts;
-  return ts | cpu;
+  return ts | cpu | ((int)from_saver << (kTSShift - 1));
 }
 
-void MallocTracer::RefreshBufferInnerLocked(uint64_t size) {
+void MallocTracer::RefreshBufferInnerLocked(uint64_t size, bool from_saver) {
   char meta_buf[32];
   char *p = meta_buf;
   EventsEncoder::triple enc =
-    EventsEncoder::encode_buffer(thread_id, ts_and_cpu(), size);
+    EventsEncoder::encode_buffer(thread_id, ts_and_cpu(from_saver), size);
   p = VarintCodec::encode_unsigned(p, enc.first);
   p = VarintCodec::encode_unsigned(p, enc.second.first);
   p = VarintCodec::encode_unsigned(p, enc.second.second);
@@ -272,7 +272,7 @@ void MallocTracer::RefreshBuffer(int number, uint64_t one, uint64_t two) {
 
 repeat:
   if (buf_ptr != signal_saved_buf_ptr) {
-    RefreshBufferInnerLocked(buf_ptr - signal_saved_buf_ptr);
+    RefreshBufferInnerLocked(buf_ptr - signal_saved_buf_ptr, false);
   }
 
   SetBufPtr(buf_storage);
@@ -298,14 +298,14 @@ repeat:
   }
 }
 
-void MallocTracer::DumpFromSignalLocked() {
+void MallocTracer::DumpFromSaverThread() {
   uint64_t s = signal_snapshot_buf_ptr - signal_saved_buf_ptr;
 
   if (s == 0) {
     return;
   }
 
-  RefreshBufferInnerLocked(s);
+  RefreshBufferInnerLocked(s, true);
 
   signal_saved_buf_ptr = signal_snapshot_buf_ptr;
 
@@ -325,7 +325,7 @@ void MallocTracer::RefreshTokenAndDec() {
   char *p = buf_ptr;
 
   EventsEncoder::pair enc =
-    EventsEncoder::encode_token(base - kTokenSize, ts_and_cpu());
+    EventsEncoder::encode_token(base - kTokenSize, ts_and_cpu(false));
 
   p = VarintCodec::encode_unsigned(p, enc.first);
   p = VarintCodec::encode_unsigned(p, enc.second);
@@ -370,12 +370,12 @@ void MallocTracer::DumpEverything() {
     if (s->ptr->signal_snapshot_buf_ptr == s->ptr->signal_saved_buf_ptr) {
       continue;
     }
-    s->ptr->DumpFromSignalLocked();
+    s->ptr->DumpFromSaverThread();
   }
 
   char sync_end_buf[24];
   char *p = sync_end_buf;
-  EventsEncoder::pair enc = EventsEncoder::encode_sync_barrier(ts_and_cpu());
+  EventsEncoder::pair enc = EventsEncoder::encode_sync_barrier(ts_and_cpu(false));
   p = VarintCodec::encode_unsigned(p, enc.first);
   p = VarintCodec::encode_unsigned(p, enc.second);
   append_buf_locked(sync_end_buf, p - sync_end_buf);
@@ -394,7 +394,7 @@ MallocTracer::~MallocTracer() {
   RefreshBuffer(0, 0, 0);
 
   char *p = buf_ptr;
-  EventsEncoder::pair enc = EventsEncoder::encode_death(thread_id, ts_and_cpu());
+  EventsEncoder::pair enc = EventsEncoder::encode_death(thread_id, ts_and_cpu(false));
   p = VarintCodec::encode_unsigned(p, enc.first);
   p = VarintCodec::encode_unsigned(p, enc.second);
 
