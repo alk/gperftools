@@ -74,7 +74,7 @@ static const int kDumperPeriodMicros = 3000;
 
 static SpinLock lock(base::LINKER_INITIALIZED);
 
-static const int kTokenSize = 4 << 10;
+static const int kTokenSize = 1 << 10;
 static const int kTSShift = 10;
 static const uint64_t kTSMask = ~((1ULL << kTSShift) - 1);
 
@@ -248,10 +248,21 @@ static void append_buf_locked(const char *buf, size_t size) {
 }
 
 static inline uint64_t ts_and_cpu(bool from_saver) {
-  unsigned cpu;
-  uint64_t ts = __rdtscp(&cpu) & kTSMask;
+  struct timespec tss;
+  clock_gettime(CLOCK_MONOTONIC, &tss);
+  uint64_t ts = (uint64_t)tss.tv_sec * 1000000000 + tss.tv_nsec;
+  ts &= kTSMask;
   ts -= base_ts;
-  return ts | cpu | ((int)from_saver << (kTSShift - 1));
+  ts |= sched_getcpu();
+  if (from_saver) {
+    ts |= (1 << (kTSShift - 1));
+  }
+  return ts;
+
+  // unsigned cpu;
+  // uint64_t ts = __rdtscp(&cpu) & kTSMask;
+  // ts -= base_ts;
+  // return ts | cpu | ((int)from_saver << (kTSShift - 1));
 }
 
 void MallocTracer::RefreshBufferInnerLocked(uint64_t size, bool from_saver) {
