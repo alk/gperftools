@@ -58,8 +58,8 @@
 
 namespace tcmalloc {
 
-#define FD_BUF_SIZE (16 << 20)
-#define BUFS_COUNT 4
+#define BUFS_COUNT 8
+#define FD_BUF_SIZE ((64 << 20)/BUFS_COUNT)
 
 // Buffer lifecycle is as follows:
 //
