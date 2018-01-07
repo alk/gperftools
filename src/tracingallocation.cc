@@ -146,7 +146,7 @@ static inline ATTRIBUTE_ALWAYS_INLINE void trace_free_sized(void *ptr, size_t si
   uint64_t *meta = reinterpret_cast<uint64_t *>(ptr) - 2;
   uint64_t tok = meta[1];
   uint64_t off = meta[0];
-  MallocTracer::GetInstance()->TraceFreeSized(tok, size);
+  MallocTracer::GetInstance()->TraceFreeSized(tok);
   do_free(reinterpret_cast<char *>(meta) - off);
 }
 

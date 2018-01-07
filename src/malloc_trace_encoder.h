@@ -87,18 +87,12 @@ struct EventsEncoder {
     return to_encode;
   }
 
-  static pair encode_free_sized(uint64_t token, uint64_t _size,
-                                uint64_t *prev_token, ssize_t *prev_size) {
-    uint64_t first = VarintCodec::zigzag(token - *prev_token);
-    first <<= kTypeShift;
-    first |= kEventFreeSized;
-
-    ssize_t size = static_cast<ssize_t>((_size + 7) >> 3);
-    uint64_t second = VarintCodec::zigzag(size - *prev_size);
-
-    *prev_size = size;
+  static uint64_t encode_free_sized(uint64_t token, uint64_t *prev_token) {
+    uint64_t to_encode = VarintCodec::zigzag(token - *prev_token);
+    to_encode <<= kTypeShift;
+    to_encode |= kEventFreeSized;
     *prev_token = token;
-    return std::make_pair(first, second);
+    return to_encode;
   }
 
   static pair encode_realloc(uint64_t old_token, size_t new_size,
@@ -178,15 +172,11 @@ struct EventsEncoder {
 
   template <typename T>
   static void decode_free_sized(T *f,
-                                uint64_t first_word, uint64_t second_word,
-                                uint64_t *prev_token, uint64_t *prev_size) {
+                                uint64_t first_word,
+                                uint64_t *prev_token) {
     uint64_t tok = VarintCodec::unzigzag(first_word >> kTypeShift) + *prev_token;
     *prev_token = tok;
     f->token = tok;
-    uint64_t sz = VarintCodec::unzigzag(second_word) + *prev_size;
-    *prev_size = sz;
-    sz = sz << 3;
-    f->size = sz;
   }
 
   template <typename T>

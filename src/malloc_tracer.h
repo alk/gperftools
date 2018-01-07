@@ -96,17 +96,13 @@ public:
   ATTRIBUTE_ALWAYS_INLINE
   void TraceFree(uint64_t token) {
     uint64_t to_encode = EventsEncoder::encode_free(token, &prev_token);
-
     FastEncodeWords(1, to_encode, to_encode);
   }
 
   ATTRIBUTE_ALWAYS_INLINE
-  void TraceFreeSized(uint64_t token, size_t size) {
-    EventsEncoder::pair p =
-      EventsEncoder::encode_free_sized(token, size,
-                                       &prev_token, &prev_size);
-
-    FastEncodeWords(2, p.first, p.second);
+  void TraceFreeSized(uint64_t token) {
+    uint64_t to_encode = EventsEncoder::encode_free_sized(token, &prev_token);
+    FastEncodeWords(1, to_encode, to_encode);
   }
 
   uint64_t TraceRealloc(uint64_t old_token, size_t new_size) {
