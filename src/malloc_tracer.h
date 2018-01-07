@@ -30,7 +30,6 @@
 
 #ifndef TCMALLOC_MALLOC_TRACER_H_
 #define TCMALLOC_MALLOC_TRACER_H_
-
 #include "config.h"
 
 #include <stddef.h>                     // for size_t, NULL
