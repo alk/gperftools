@@ -28,8 +28,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef MALLOC_TRACER_H
-#define MALLOC_TRACER_H
+#ifndef TCMALLOC_MALLOC_TRACER_H_
+#define TCMALLOC_MALLOC_TRACER_H_
 
 #include "config.h"
 
@@ -198,4 +198,4 @@ uint64_t MallocTracer::TraceMemalign(size_t size, size_t alignment) {
 
 } // namespace tcmalloc
 
-#endif // MALLOC_TRACER_H
+#endif  // MALLOC_TRACER_H_
