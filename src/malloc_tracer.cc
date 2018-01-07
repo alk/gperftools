@@ -43,7 +43,7 @@
 #include <netdb.h>
 #include <sys/un.h>
 
-#include <x86intrin.h>
+// #include <x86intrin.h>
 
 #include "page_heap_allocator.h"
 #include "base/spinlock.h"
@@ -147,9 +147,14 @@ void MallocTracer::malloc_tracer_destructor(void *arg) {
   malloc_tracer_allocator.Delete(tracer);
 }
 
+static uint64_t get_nanos() {
+  struct timespec tss;
+  clock_gettime(CLOCK_MONOTONIC, &tss);
+  return (uint64_t)tss.tv_sec * 1000000000 + tss.tv_nsec;
+}
 
 void MallocTracer::SetupFirstTracer() {
-  base_ts = __rdtsc() & kTSMask;
+  base_ts = get_nanos() & kTSMask;
   new (get_first_tracer()) MallocTracer(0);
 }
 
@@ -247,22 +252,17 @@ static void append_buf_locked(const char *buf, size_t size) {
   tracer_buffer->AppendData(buf, size);
 }
 
-static inline uint64_t ts_and_cpu(bool from_saver) {
-  struct timespec tss;
-  clock_gettime(CLOCK_MONOTONIC, &tss);
-  uint64_t ts = (uint64_t)tss.tv_sec * 1000000000 + tss.tv_nsec;
+uint64_t MallocTracer::ts_and_cpu(bool from_saver) {
+  uint64_t ts = get_nanos();
   ts &= kTSMask;
   ts -= base_ts;
-  ts |= sched_getcpu();
+  last_cpu = sched_getcpu();
+  // last_cpu = base::subtle::percpu::RseqCpuId();
+  ts |= last_cpu & ~kTSMask;
   if (from_saver) {
     ts |= (1 << (kTSShift - 1));
   }
   return ts;
-
-  // unsigned cpu;
-  // uint64_t ts = __rdtscp(&cpu) & kTSMask;
-  // ts -= base_ts;
-  // return ts | cpu | ((int)from_saver << (kTSShift - 1));
 }
 
 void MallocTracer::RefreshBufferInnerLocked(uint64_t size, bool from_saver) {
@@ -307,6 +307,28 @@ repeat:
     number = 0;
     goto repeat;
   }
+}
+
+void MallocTracer::WriteWordsSlow(int count, uint64_t first, uint64_t second) {
+  if (!HasSpaceFor(count+2)) {
+    RefreshBuffer(count, first, second);
+    return;
+  }
+
+  char *p = buf_ptr;
+
+  p = VarintCodec::encode_unsigned(p, first);
+  if (count > 1) {
+    p = VarintCodec::encode_unsigned(p, second);
+  }
+
+  EventsEncoder::pair enc =
+      EventsEncoder::encode_token(token_base - counter + 1, ts_and_cpu(false));
+
+  p = VarintCodec::encode_unsigned(p, enc.first);
+  p = VarintCodec::encode_unsigned(p, enc.second);
+
+  SetBufPtr(p);
 }
 
 void MallocTracer::DumpFromSaverThread() {
@@ -386,7 +408,8 @@ void MallocTracer::DumpEverything() {
 
   char sync_end_buf[24];
   char *p = sync_end_buf;
-  EventsEncoder::pair enc = EventsEncoder::encode_sync_barrier(ts_and_cpu(false));
+  //TODO
+  EventsEncoder::pair enc = EventsEncoder::encode_sync_barrier(0); //ts_and_cpu(false));
   p = VarintCodec::encode_unsigned(p, enc.first);
   p = VarintCodec::encode_unsigned(p, enc.second);
   append_buf_locked(sync_end_buf, p - sync_end_buf);

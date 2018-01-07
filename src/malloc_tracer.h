@@ -54,6 +54,31 @@ public:
   }
 
   ATTRIBUTE_ALWAYS_INLINE
+  void FastEncodeWords(int count, uint64_t first, uint64_t second) {
+    // int cpu = base::subtle::percpu::RseqCpuId();
+
+    // if (ABSL_PREDICT_FALSE(cpu != last_cpu)) {
+    //   WriteWordsSlow(count, first, second);
+    //   return;
+    // }
+
+
+    if (PREDICT_FALSE(!HasSpaceFor(count))) {
+      RefreshBuffer(count, first, second);
+      return;
+    }
+
+    char *wp = buf_ptr;
+
+    wp = VarintCodec::encode_unsigned(wp, first);
+    if (count > 1) {
+      wp = VarintCodec::encode_unsigned(wp, second);
+    }
+
+    SetBufPtr(wp);
+  }
+
+  ATTRIBUTE_ALWAYS_INLINE
   uint64_t TraceMalloc(size_t size) {
     uint64_t to_encode = EventsEncoder::encode_malloc(size, &prev_size);
 
@@ -63,12 +88,7 @@ public:
 
     uint64_t token = token_base - counter;
 
-    if (!HasSpaceFor(1)) {
-      RefreshBuffer(1, to_encode, to_encode);
-      return token;
-    }
-
-    SetBufPtr(VarintCodec::encode_unsigned(buf_ptr, to_encode));
+    FastEncodeWords(1, to_encode, to_encode);
 
     return token;
   }
@@ -77,12 +97,7 @@ public:
   void TraceFree(uint64_t token) {
     uint64_t to_encode = EventsEncoder::encode_free(token, &prev_token);
 
-    if (!HasSpaceFor(1)) {
-      RefreshBuffer(1, to_encode, to_encode);
-      return;
-    }
-
-    SetBufPtr(VarintCodec::encode_unsigned(buf_ptr, to_encode));
+    FastEncodeWords(1, to_encode, to_encode);
   }
 
   ATTRIBUTE_ALWAYS_INLINE
@@ -91,17 +106,7 @@ public:
       EventsEncoder::encode_free_sized(token, size,
                                        &prev_token, &prev_size);
 
-    if (!HasSpaceFor(2)) {
-      RefreshBuffer(2, p.first, p.second);
-      return;
-    }
-
-    char *wp = buf_ptr;
-
-    wp = VarintCodec::encode_unsigned(wp, p.first);
-    wp = VarintCodec::encode_unsigned(wp, p.second);
-
-    SetBufPtr(wp);
+    FastEncodeWords(2, p.first, p.second);
   }
 
   uint64_t TraceRealloc(uint64_t old_token, size_t new_size) {
@@ -115,17 +120,7 @@ public:
 
     uint64_t token = token_base - counter;
 
-    if (!HasSpaceFor(2)) {
-      RefreshBuffer(2, p.first, p.second);
-      return token;
-    }
-
-    char *wp = buf_ptr;
-
-    wp = VarintCodec::encode_unsigned(wp, p.first);
-    wp = VarintCodec::encode_unsigned(wp, p.second);
-
-    SetBufPtr(wp);
+    FastEncodeWords(2, p.first, p.second);
 
     return token;
   }
@@ -140,17 +135,7 @@ public:
 
     uint64_t token = token_base - counter;
 
-    if (!HasSpaceFor(2)) {
-      RefreshBuffer(2, p.first, p.second);
-      return token;
-    }
-
-    char *wp = buf_ptr;
-
-    wp = VarintCodec::encode_unsigned(wp, p.first);
-    wp = VarintCodec::encode_unsigned(wp, p.second);
-
-    SetBufPtr(wp);
+    FastEncodeWords(2, p.first, p.second);
 
     return token;
   }
@@ -191,6 +176,10 @@ private:
   static void do_setup_tls();
   static void malloc_tracer_destructor(void *arg);
 
+  inline uint64_t ts_and_cpu(bool from_saver);
+
+  void WriteWordsSlow(int count, uint64_t first, uint64_t second);
+
   void DumpFromSaverThread();
 
   uint64_t thread_id;
@@ -200,6 +189,8 @@ private:
 
   ssize_t prev_size;
   uint64_t prev_token;
+
+  int last_cpu;
 
   char *buf_ptr;
   char *buf_end;
