@@ -31,9 +31,9 @@
 #ifndef MALLOC_TRACER_H
 #define MALLOC_TRACER_H
 
-#include <config.h>
-#include <stddef.h>                     // for size_t, NULL
+#include "config.h"
 
+#include <stddef.h>                     // for size_t, NULL
 #ifdef HAVE_STDINT_H
 #include <stdint.h>                     // for uint32_t, uint64_t
 #endif
@@ -46,100 +46,15 @@ namespace tcmalloc {
 
 class MallocTracer {
 public:
-  static MallocTracer *GetInstance() {
-    if (instance.ptr) {
-      return instance.ptr;
-    }
-    return GetInstanceSlow();
-  }
+  static inline MallocTracer *GetInstance();
 
-  ATTRIBUTE_ALWAYS_INLINE
-  void FastEncodeWords(int count, uint64_t first, uint64_t second) {
-    // int cpu = base::subtle::percpu::RseqCpuId();
-
-    // if (ABSL_PREDICT_FALSE(cpu != last_cpu)) {
-    //   WriteWordsSlow(count, first, second);
-    //   return;
-    // }
-
-
-    if (PREDICT_FALSE(!HasSpaceFor(count))) {
-      RefreshBuffer(count, first, second);
-      return;
-    }
-
-    char *wp = buf_ptr;
-
-    wp = VarintCodec::encode_unsigned(wp, first);
-    if (count > 1) {
-      wp = VarintCodec::encode_unsigned(wp, second);
-    }
-
-    SetBufPtr(wp);
-  }
-
-  ATTRIBUTE_ALWAYS_INLINE
-  uint64_t TraceMalloc(size_t size) {
-    uint64_t to_encode = EventsEncoder::encode_malloc(size, &prev_size);
-
-    if (!--counter) {
-      RefreshTokenAndDec();
-    }
-
-    uint64_t token = token_base - counter;
-
-    FastEncodeWords(1, to_encode, to_encode);
-
-    return token;
-  }
-
-  ATTRIBUTE_ALWAYS_INLINE
-  void TraceFree(uint64_t token) {
-    uint64_t to_encode = EventsEncoder::encode_free(token, &prev_token);
-    FastEncodeWords(1, to_encode, to_encode);
-  }
-
-  ATTRIBUTE_ALWAYS_INLINE
-  void TraceFreeSized(uint64_t token) {
-    uint64_t to_encode = EventsEncoder::encode_free_sized(token, &prev_token);
-    FastEncodeWords(1, to_encode, to_encode);
-  }
-
-  uint64_t TraceRealloc(uint64_t old_token, size_t new_size) {
-    EventsEncoder::pair p =
-      EventsEncoder::encode_realloc(old_token, new_size,
-                                    &prev_size, &prev_token);
-
-    if (!--counter) {
-      RefreshTokenAndDec();
-    }
-
-    uint64_t token = token_base - counter;
-
-    FastEncodeWords(2, p.first, p.second);
-
-    return token;
-  }
-
-  uint64_t TraceMemalign(size_t size, size_t alignment) {
-    EventsEncoder::pair p =
-      EventsEncoder::encode_memalign(size, alignment, &prev_size);
-
-    if (!--counter) {
-      RefreshTokenAndDec();
-    }
-
-    uint64_t token = token_base - counter;
-
-    FastEncodeWords(2, p.first, p.second);
-
-    return token;
-  }
-
-  ~MallocTracer();
+  inline uint64_t TraceMalloc(size_t size);
+  inline void TraceFree(uint64_t token);
+  inline void TraceFreeSized(uint64_t token);
+  inline uint64_t TraceRealloc(uint64_t old_token, size_t new_size);
+  inline uint64_t TraceMemalign(size_t size, size_t alignment);
 
   static void DumpEverything();
-
   static void ExcludeCurrentThreadDumping();
 
   struct Storage {
@@ -152,6 +67,9 @@ public:
 
 private:
   MallocTracer(uint64_t _thread_id);
+  ~MallocTracer();
+
+  inline void AppendWords(int count, uint64_t first, uint64_t second);
 
   void SetBufPtr(char *new_value) {
     *const_cast<char * volatile *>(&buf_ptr) = new_value;
@@ -200,6 +118,83 @@ private:
   static __thread Storage instance ATTR_INITIAL_EXEC;
   static Storage *all_tracers;
 };
+
+inline ATTRIBUTE_ALWAYS_INLINE
+MallocTracer *MallocTracer::GetInstance() {
+  if (instance.ptr) {
+    return instance.ptr;
+  }
+  return GetInstanceSlow();
+}
+
+inline ATTRIBUTE_ALWAYS_INLINE
+void MallocTracer::AppendWords(int count, uint64_t first, uint64_t second) {
+  if (PREDICT_FALSE(!HasSpaceFor(count))) {
+    RefreshBuffer(count, first, second);
+    return;
+  }
+
+  char *wp = buf_ptr;
+
+  wp = VarintCodec::encode_unsigned(wp, first);
+  if (count > 1) {
+    wp = VarintCodec::encode_unsigned(wp, second);
+  }
+
+  SetBufPtr(wp);
+}
+
+inline ATTRIBUTE_ALWAYS_INLINE
+uint64_t MallocTracer::TraceMalloc(size_t size) {
+  if (!--counter) {
+    RefreshTokenAndDec();
+  }
+  uint64_t token = token_base - counter;
+
+  uint64_t to_encode = EventsEncoder::encode_malloc(size, &prev_size);
+  AppendWords(1, to_encode, to_encode);
+  return token;
+}
+
+inline ATTRIBUTE_ALWAYS_INLINE
+void MallocTracer::TraceFree(uint64_t token) {
+  uint64_t to_encode = EventsEncoder::encode_free(token, &prev_token);
+  AppendWords(1, to_encode, to_encode);
+}
+
+inline ATTRIBUTE_ALWAYS_INLINE
+void MallocTracer::TraceFreeSized(uint64_t token) {
+  uint64_t to_encode = EventsEncoder::encode_free_sized(token, &prev_token);
+  AppendWords(1, to_encode, to_encode);
+}
+
+inline ATTRIBUTE_ALWAYS_INLINE
+uint64_t MallocTracer::TraceRealloc(uint64_t old_token, size_t new_size) {
+  if (!--counter) {
+    RefreshTokenAndDec();
+  }
+  uint64_t token = token_base - counter;
+
+  EventsEncoder::pair p =
+      EventsEncoder::encode_realloc(old_token, new_size,
+                                    &prev_size, &prev_token);
+  AppendWords(2, p.first, p.second);
+  return token;
+}
+
+inline ATTRIBUTE_ALWAYS_INLINE
+uint64_t MallocTracer::TraceMemalign(size_t size, size_t alignment) {
+  if (!--counter) {
+    RefreshTokenAndDec();
+  }
+  uint64_t token = token_base - counter;
+
+  EventsEncoder::pair p =
+      EventsEncoder::encode_memalign(size, alignment, &prev_size);
+  AppendWords(2, p.first, p.second);
+  return token;
+}
+
 
 } // namespace tcmalloc
 
