@@ -30,8 +30,8 @@
 
 #ifndef TCMALLOC_TRACER_BUFFER_H_
 #define TCMALLOC_TRACER_BUFFER_H_
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "internal_logging.h"
 

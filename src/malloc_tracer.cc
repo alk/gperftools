@@ -48,8 +48,8 @@
 #include "base/googleinit.h"
 #include "base/spinlock.h"
 #include "internal_logging.h"
-#include "tracer_buffer.h"
 #include "page_heap_allocator.h"
+#include "tracer_buffer.h"
 
 namespace tcmalloc {
 
