@@ -75,7 +75,9 @@ private:
   }
 
   bool HasSpaceFor(int varints) {
-    return (buf_ptr + 10 * (varints - 1) < buf_end);
+    // note, buf_end is set up such that varints = 1 case doesn't need any
+    // extra computation
+    return (buf_ptr + AltVarintCodec::kMaxSize * (varints - 1) < buf_end);
   }
 
   void RefreshToken();

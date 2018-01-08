@@ -238,7 +238,7 @@ MallocTracer::MallocTracer(uint64_t _thread_id) {
   prev_size = 0;
   prev_token = 0;
   buf_ptr = buf_storage;
-  buf_end = buf_storage + sizeof(buf_storage) - 10;
+  buf_end = buf_storage + sizeof(buf_storage) - AltVarintCodec::kMaxSize;
   signal_saved_buf_ptr = buf_storage;
   destroy_count = 0;
 
