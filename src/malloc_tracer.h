@@ -150,20 +150,20 @@ uint64_t MallocTracer::TraceMalloc(size_t size) {
   }
   uint64_t token = token_base_ - counter_;
 
-  uint64_t to_encode = EventsEncoder::encode_malloc(size, &prev_size_);
+  uint64_t to_encode = MallocTraceEncoder::encode_malloc(size, &prev_size_);
   AppendWords(1, to_encode, to_encode);
   return token;
 }
 
 inline ATTRIBUTE_ALWAYS_INLINE
 void MallocTracer::TraceFree(uint64_t token) {
-  uint64_t to_encode = EventsEncoder::encode_free(token, &prev_token_);
+  uint64_t to_encode = MallocTraceEncoder::encode_free(token, &prev_token_);
   AppendWords(1, to_encode, to_encode);
 }
 
 inline ATTRIBUTE_ALWAYS_INLINE
 void MallocTracer::TraceFreeSized(uint64_t token) {
-  uint64_t to_encode = EventsEncoder::encode_free_sized(token, &prev_token_);
+  uint64_t to_encode = MallocTraceEncoder::encode_free_sized(token, &prev_token_);
   AppendWords(1, to_encode, to_encode);
 }
 
@@ -174,8 +174,8 @@ uint64_t MallocTracer::TraceRealloc(uint64_t old_token, size_t new_size) {
   }
   uint64_t token = token_base_ - counter_;
 
-  EventsEncoder::pair p =
-      EventsEncoder::encode_realloc(old_token, new_size,
+  MallocTraceEncoder::pair p =
+      MallocTraceEncoder::encode_realloc(old_token, new_size,
                                     &prev_size_, &prev_token_);
   AppendWords(2, p.first, p.second);
   return token;
@@ -188,8 +188,8 @@ uint64_t MallocTracer::TraceMemalign(size_t size, size_t alignment) {
   }
   uint64_t token = token_base_ - counter_;
 
-  EventsEncoder::pair p =
-      EventsEncoder::encode_memalign(size, alignment, &prev_size_);
+  MallocTraceEncoder::pair p =
+      MallocTraceEncoder::encode_memalign(size, alignment, &prev_size_);
   AppendWords(2, p.first, p.second);
   return token;
 }

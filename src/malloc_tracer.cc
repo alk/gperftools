@@ -52,25 +52,6 @@
 
 namespace tcmalloc {
 
-const unsigned EventsEncoder::kEventMalloc;
-const unsigned EventsEncoder::kEventFree;
-const unsigned EventsEncoder::kEventTok;
-const unsigned EventsEncoder::kEventBuf;
-const unsigned EventsEncoder::kEventFreeSized;
-const unsigned EventsEncoder::kEventExtBase;
-const unsigned EventsEncoder::kTypeShift;
-const unsigned EventsEncoder::kTypeMask;
-const unsigned EventsEncoder::kEventDeath;
-const unsigned EventsEncoder::kEventEnd;
-const unsigned EventsEncoder::kEventRealloc;
-const unsigned EventsEncoder::kEventMemalign;
-const unsigned EventsEncoder::kEventSyncBarrier;
-const unsigned EventsEncoder::kExtTypeShift;
-const unsigned EventsEncoder::kExtTypeMask;
-
-const int EventsEncoder::kTSShift;
-const uint64_t EventsEncoder::kTSMask;
-
 static const int kDumperPeriodMicros = 3000;
 
 static const int kTokenSize = 1 << 10;
@@ -115,7 +96,7 @@ void MallocTracer::MallocTracerDestructor(void *arg) {
   CHECK_CONDITION(!had_tracer);
 
   MallocTracer::Storage *instanceptr =
-    reinterpret_cast<MallocTracer::Storage *>(arg);
+      reinterpret_cast<MallocTracer::Storage *>(arg);
 
   MallocTracer *tracer = instanceptr->ptr;
 
@@ -157,7 +138,7 @@ static uint64_t get_nanos() {
 }
 
 void MallocTracer::SetupFirstTracer() {
-  base_ts = get_nanos() & EventsEncoder::kTSMask;
+  base_ts = get_nanos() & MallocTraceEncoder::kTSMask;
   new (get_first_tracer()) MallocTracer(0);
 }
 
@@ -261,14 +242,14 @@ static void append_buf_locked(const char *buf, size_t size) {
 uint64_t MallocTracer::UpdateTSAndCPU() {
   uint64_t ts = get_nanos();
   last_cpu_ = sched_getcpu();
-  return EventsEncoder::bundle_ts_and_cpu(ts, last_cpu_);
+  return MallocTraceEncoder::bundle_ts_and_cpu(ts, last_cpu_);
 }
 
 void MallocTracer::RefreshBufferInnerLocked(uint64_t size, uint64_t ts_and_cpu) {
   char meta_buf[32];
   char *p = meta_buf;
-  EventsEncoder::triple enc =
-    EventsEncoder::encode_buffer(thread_id_, ts_and_cpu, size);
+  MallocTraceEncoder::triple enc =
+      MallocTraceEncoder::encode_buffer(thread_id_, ts_and_cpu, size);
   p = AltVarintCodec::encode_unsigned(p, enc.first);
   p = AltVarintCodec::encode_unsigned(p, enc.second.first);
   p = AltVarintCodec::encode_unsigned(p, enc.second.second);
@@ -296,7 +277,7 @@ void MallocTracer::DumpFromSaverThread() {
     return;
   }
 
-  uint64_t tscpu = EventsEncoder::bundle_ts_and_cpu(get_nanos(), last_cpu_);
+  uint64_t tscpu = MallocTraceEncoder::bundle_ts_and_cpu(get_nanos(), last_cpu_);
   RefreshBufferInnerLocked(s, tscpu);
 
   signal_saved_buf_ptr_ = signal_snapshot_buf_ptr_;
@@ -310,7 +291,7 @@ void MallocTracer::RefreshTokenAndDec() {
   token_base_ = base;
   counter_ = kTokenSize;
 
-  EventsEncoder::pair enc = EventsEncoder::encode_token(
+  MallocTraceEncoder::pair enc = MallocTraceEncoder::encode_token(
       base - kTokenSize,
       UpdateTSAndCPU());
 
@@ -361,9 +342,10 @@ void MallocTracer::DumpEverything() {
   char sync_end_buf[24];
   char *p = sync_end_buf;
 
-  uint64_t ts_and_cpu = EventsEncoder::bundle_ts_and_cpu(get_nanos(),
-                                                         sched_getcpu());
-  EventsEncoder::pair enc = EventsEncoder::encode_sync_barrier(ts_and_cpu);
+  uint64_t ts_and_cpu = MallocTraceEncoder::bundle_ts_and_cpu(get_nanos(),
+                                                              sched_getcpu());
+  MallocTraceEncoder::pair enc =
+      MallocTraceEncoder::encode_sync_barrier(ts_and_cpu);
   p = AltVarintCodec::encode_unsigned(p, enc.first);
   p = AltVarintCodec::encode_unsigned(p, enc.second);
   append_buf_locked(sync_end_buf, p - sync_end_buf);
@@ -385,8 +367,8 @@ MallocTracer::~MallocTracer() {
   RefreshBuffer();
 
   char *p = buf_ptr_;
-  EventsEncoder::pair enc = EventsEncoder::encode_death(thread_id_,
-                                                        UpdateTSAndCPU());
+  MallocTraceEncoder::pair enc =
+      MallocTraceEncoder::encode_death(thread_id_, UpdateTSAndCPU());
   p = AltVarintCodec::encode_unsigned(p, enc.first);
   p = AltVarintCodec::encode_unsigned(p, enc.second);
 
@@ -409,7 +391,7 @@ static void finalize_tracing() {
 
   char encoded_end[16];
   char *p = encoded_end;
-  p = AltVarintCodec::encode_unsigned(p, EventsEncoder::encode_end());
+  p = AltVarintCodec::encode_unsigned(p, MallocTraceEncoder::encode_end());
   ASSERT(p <= encoded_end + sizeof(encoded_end));
 
   tracer_buffer->AppendData(encoded_end, p - encoded_end);

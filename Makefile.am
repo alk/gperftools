@@ -791,6 +791,7 @@ libtcmalloc_minimal_tracing_la_SOURCES =  src/tracingallocation.cc \
                                           src/altvarint_codec.h \
                                           src/altvarint_codec.cc \
                                           src/malloc_trace_encoder.h \
+                                          src/malloc_trace_encoder.cc \
                                           src/malloc_tracer.h \
                                           src/malloc_tracer.cc \
                                           src/malloc_tracer_buf.h \
