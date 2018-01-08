@@ -153,7 +153,8 @@ class LZ4Compressor : public Writer {
 const int LZ4Compressor::kBlockSize;
 const int LZ4Compressor::kMinAmountToSave;
 
-LZ4Compressor::LZ4Compressor(Writer* slave) : buf_tail_(0), slave_(slave) {
+LZ4Compressor::LZ4Compressor(Writer* slave)
+    : buf_tail_(0), slave_(slave) {
   LZ4F_errorCode_t err = LZ4F_createCompressionContext(&lzctx_, LZ4F_VERSION);
   if (err != 0) {
     abort();
