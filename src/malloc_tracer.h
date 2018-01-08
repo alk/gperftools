@@ -197,4 +197,4 @@ uint64_t MallocTracer::TraceMemalign(size_t size, size_t alignment) {
 
 } // namespace tcmalloc
 
-#endif  // MALLOC_TRACER_H_
+#endif  // TCMALLOC_MALLOC_TRACER_H_
