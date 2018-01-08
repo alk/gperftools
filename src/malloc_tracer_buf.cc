@@ -212,7 +212,7 @@ static sem_t saver_thread_sem;
 
 static void *saver_thread(void *_arg) {
   MallocTracer::GetInstance();
-  MallocTracer::ExcludeCurrentThreadDumping();
+  MallocTracer::ExcludeCurrentThreadFromDumping();
   sem_post(&saver_thread_sem);
 
   Writer* writer = reinterpret_cast<Writer*>(_arg);

@@ -27,30 +27,28 @@
 // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#include "config.h"
 
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/types.h>
 #include <errno.h>
-#include <stdlib.h>
-#include <sys/mman.h>
-#include <time.h>
-#include <stdio.h>
+#include <fcntl.h>
+#include <netdb.h>
 #include <pthread.h>
 #include <semaphore.h>
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
-#include <netdb.h>
+#include <sys/types.h>
 #include <sys/un.h>
+#include <time.h>
+#include <unistd.h>
 
-// #include <x86intrin.h>
-
-#include "page_heap_allocator.h"
-#include "base/spinlock.h"
 #include "base/googleinit.h"
+#include "base/spinlock.h"
 #include "internal_logging.h"
 #include "malloc_tracer.h"
 #include "malloc_tracer_buf.h"
+#include "page_heap_allocator.h"
 
 namespace tcmalloc {
 
@@ -72,11 +70,11 @@ const unsigned EventsEncoder::kExtTypeMask;
 
 static const int kDumperPeriodMicros = 3000;
 
-static SpinLock lock(base::LINKER_INITIALIZED);
-
 static const int kTokenSize = 1 << 10;
 static const int kTSShift = 10;
 static const uint64_t kTSMask = ~((1ULL << kTSShift) - 1);
+
+static SpinLock lock(base::LINKER_INITIALIZED);
 
 static uint64_t token_counter;
 static uint64_t thread_id_counter;
@@ -84,10 +82,10 @@ static uint64_t thread_dump_written;
 
 static uint64_t base_ts;
 
-__thread MallocTracer::Storage MallocTracer::instance ATTR_INITIAL_EXEC;
+__thread MallocTracer::Storage MallocTracer::instance_ ATTR_INITIAL_EXEC;
 __thread bool had_tracer;
 
-MallocTracer::Storage *MallocTracer::all_tracers;
+MallocTracer::Storage *MallocTracer::all_tracers_;
 
 static pthread_key_t instance_key;
 static pthread_once_t setup_once = PTHREAD_ONCE_INIT;
@@ -98,6 +96,8 @@ static tcmalloc::PageHeapAllocator<MallocTracer> malloc_tracer_allocator;
 static TracerBuffer* tracer_buffer;
 
 static bool no_more_writes;
+
+COMPILE_ASSERT(sizeof(MallocTracer) == 4096, malloc_tracer_is_4k);
 
 static union {
   struct {
@@ -120,7 +120,7 @@ void MallocTracer::malloc_tracer_destructor(void *arg) {
 
   // have pthread call us again on next destruction iteration and give
   // rest of tls destructors chance to get traced properly
-  if (tracer->destroy_count++ < 3) {
+  if (tracer->destroy_count_++ < 3) {
     pthread_setspecific(instance_key, instanceptr);
     return;
   }
@@ -215,32 +215,34 @@ MallocTracer *MallocTracer::GetInstanceSlow(void) {
       new (an_instance) MallocTracer(thread_id);
     }
 
-    instance.ptr = an_instance;
-    instance.next = all_tracers;
-    instance.pprev = &all_tracers;
+    instance_.ptr = an_instance;
+    instance_.next = all_tracers_;
+    instance_.pprev = &all_tracers_;
 
-    if (instance.next) {
-      instance.next->pprev = &instance.next;
+    if (instance_.next) {
+      instance_.next->pprev = &instance_.next;
     }
-    all_tracers = &instance;
+    all_tracers_ = &instance_;
   }
 
   if (!had_tracer) {
-    pthread_setspecific(instance_key, &instance);
+    pthread_setspecific(instance_key, &instance_);
   }
 
   return an_instance;
 }
 
-MallocTracer::MallocTracer(uint64_t _thread_id) {
-  thread_id = _thread_id;
-  counter = 0;
-  prev_size = 0;
-  prev_token = 0;
-  buf_ptr = buf_storage;
-  buf_end = buf_storage + sizeof(buf_storage) - AltVarintCodec::kMaxSize;
-  signal_saved_buf_ptr = buf_storage;
-  destroy_count = 0;
+MallocTracer::MallocTracer(uint64_t thread_id) {
+  buf_ptr_ = buf_storage_;
+  buf_end_ = buf_storage_ + sizeof(buf_storage_) - AltVarintCodec::kMaxSize;
+
+  thread_id_ = thread_id;
+  token_base_ = counter_ = 0;
+  prev_size_ = 0;
+  prev_token_ = 0;
+  last_cpu_ = -1;
+  signal_snapshot_buf_ptr_ = signal_saved_buf_ptr_ = buf_storage_;
+  destroy_count_ = 0;
 
   RefreshToken();
 }
@@ -256,9 +258,9 @@ uint64_t MallocTracer::ts_and_cpu(bool from_saver) {
   uint64_t ts = get_nanos();
   ts &= kTSMask;
   ts -= base_ts;
-  last_cpu = sched_getcpu();
-  // last_cpu = base::subtle::percpu::RseqCpuId();
-  ts |= last_cpu & ~kTSMask;
+  last_cpu_ = sched_getcpu();
+  // last_cpu_ = base::subtle::percpu::RseqCpuId();
+  ts |= last_cpu_ & ~kTSMask;
   if (from_saver) {
     ts |= (1 << (kTSShift - 1));
   }
@@ -269,53 +271,53 @@ void MallocTracer::RefreshBufferInnerLocked(uint64_t size, bool from_saver) {
   char meta_buf[32];
   char *p = meta_buf;
   EventsEncoder::triple enc =
-    EventsEncoder::encode_buffer(thread_id, ts_and_cpu(from_saver), size);
+    EventsEncoder::encode_buffer(thread_id_, ts_and_cpu(from_saver), size);
   p = AltVarintCodec::encode_unsigned(p, enc.first);
   p = AltVarintCodec::encode_unsigned(p, enc.second.first);
   p = AltVarintCodec::encode_unsigned(p, enc.second.second);
 
   append_buf_locked(meta_buf, p - meta_buf);
-  append_buf_locked(signal_saved_buf_ptr, size);
+  append_buf_locked(signal_saved_buf_ptr_, size);
 }
 
 void MallocTracer::RefreshBuffer(int number, uint64_t one, uint64_t two) {
   SpinLockHolder h(&lock);
 
 repeat:
-  if (buf_ptr != signal_saved_buf_ptr) {
-    RefreshBufferInnerLocked(buf_ptr - signal_saved_buf_ptr, false);
+  if (buf_ptr_ != signal_saved_buf_ptr_) {
+    RefreshBufferInnerLocked(buf_ptr_ - signal_saved_buf_ptr_, false);
   }
 
-  SetBufPtr(buf_storage);
-  signal_saved_buf_ptr = buf_storage;
+  SetBufPtr(buf_storage_);
+  signal_saved_buf_ptr_ = buf_storage_;
 
   switch (number) {
   case 0:
     return;
   case 2:
     SetBufPtr(AltVarintCodec::encode_unsigned(
-                AltVarintCodec::encode_unsigned(buf_ptr, one), two));
+                AltVarintCodec::encode_unsigned(buf_ptr_, one), two));
     break;
   case 1:
-    SetBufPtr(AltVarintCodec::encode_unsigned(buf_ptr, one));
+    SetBufPtr(AltVarintCodec::encode_unsigned(buf_ptr_, one));
     break;
   default:
     abort();
   }
 
-  if (destroy_count) {
+  if (destroy_count_) {
     number = 0;
     goto repeat;
   }
 }
 
 void MallocTracer::WriteWordsSlow(int count, uint64_t first, uint64_t second) {
-  if (!HasSpaceFor(count+2)) {
+  if (!HasSpaceFor(count + 2)) {
     RefreshBuffer(count, first, second);
     return;
   }
 
-  char *p = buf_ptr;
+  char *p = buf_ptr_;
 
   p = AltVarintCodec::encode_unsigned(p, first);
   if (count > 1) {
@@ -323,7 +325,7 @@ void MallocTracer::WriteWordsSlow(int count, uint64_t first, uint64_t second) {
   }
 
   EventsEncoder::pair enc =
-      EventsEncoder::encode_token(token_base - counter + 1, ts_and_cpu(false));
+      EventsEncoder::encode_token(token_base_ - counter_ + 1, ts_and_cpu(false));
 
   p = AltVarintCodec::encode_unsigned(p, enc.first);
   p = AltVarintCodec::encode_unsigned(p, enc.second);
@@ -332,7 +334,7 @@ void MallocTracer::WriteWordsSlow(int count, uint64_t first, uint64_t second) {
 }
 
 void MallocTracer::DumpFromSaverThread() {
-  uint64_t s = signal_snapshot_buf_ptr - signal_saved_buf_ptr;
+  uint64_t s = signal_snapshot_buf_ptr_ - signal_saved_buf_ptr_;
 
   if (s == 0) {
     return;
@@ -340,7 +342,7 @@ void MallocTracer::DumpFromSaverThread() {
 
   RefreshBufferInnerLocked(s, true);
 
-  signal_saved_buf_ptr = signal_snapshot_buf_ptr;
+  signal_saved_buf_ptr_ = signal_snapshot_buf_ptr_;
 
   thread_dump_written += s;
 }
@@ -348,14 +350,14 @@ void MallocTracer::DumpFromSaverThread() {
 void MallocTracer::RefreshTokenAndDec() {
   uint64_t base = __sync_add_and_fetch(&token_counter, kTokenSize);
 
-  token_base = base;
-  counter = kTokenSize;
+  token_base_ = base;
+  counter_ = kTokenSize;
 
   if (!HasSpaceFor(2)) {
     RefreshBuffer(0, 0, 0);
   }
 
-  char *p = buf_ptr;
+  char *p = buf_ptr_;
 
   EventsEncoder::pair enc =
     EventsEncoder::encode_token(base - kTokenSize, ts_and_cpu(false));
@@ -368,7 +370,7 @@ void MallocTracer::RefreshTokenAndDec() {
 
 void MallocTracer::RefreshToken() {
   RefreshTokenAndDec();
-  counter++;
+  counter_++;
 }
 
 static void process_wide_barrier() {
@@ -390,17 +392,17 @@ void MallocTracer::DumpEverything() {
 
   SpinLockHolder h(&lock);
 
-  for (MallocTracer::Storage *s = all_tracers; s != NULL; s = s->next) {
+  for (MallocTracer::Storage *s = all_tracers_; s != NULL; s = s->next) {
     // benign race here, reading buf_ptr
-    s->ptr->signal_snapshot_buf_ptr = *const_cast<char * volatile *>(&s->ptr->buf_ptr);
+    s->ptr->signal_snapshot_buf_ptr_ = *const_cast<char * volatile *>(&s->ptr->buf_ptr_);
   }
 
   // ensure that we're able to see all the data written up to
   // signal_snapshot_buf_ptr of all threads
   process_wide_barrier();
 
-  for (MallocTracer::Storage *s = all_tracers; s != NULL; s = s->next) {
-    if (s->ptr->signal_snapshot_buf_ptr == s->ptr->signal_saved_buf_ptr) {
+  for (MallocTracer::Storage *s = all_tracers_; s != NULL; s = s->next) {
+    if (s->ptr->signal_snapshot_buf_ptr_ == s->ptr->signal_saved_buf_ptr_) {
       continue;
     }
     s->ptr->DumpFromSaverThread();
@@ -415,27 +417,31 @@ void MallocTracer::DumpEverything() {
   append_buf_locked(sync_end_buf, p - sync_end_buf);
 }
 
-void MallocTracer::ExcludeCurrentThreadDumping() {
-  if (instance.ptr == NULL || instance.pprev == NULL) {
+void MallocTracer::ExcludeCurrentThreadFromDumping() {
+  (void)GetInstance();
+
+  if (instance_.pprev == NULL) {
     return;
   }
+
   SpinLockHolder h(&lock);
-  *instance.pprev = instance.next;
-  instance.pprev = NULL;
+  *instance_.pprev = instance_.next;
+  instance_.pprev = NULL;
 }
 
 MallocTracer::~MallocTracer() {
   RefreshBuffer(0, 0, 0);
 
-  char *p = buf_ptr;
-  EventsEncoder::pair enc = EventsEncoder::encode_death(thread_id, ts_and_cpu(false));
+  char *p = buf_ptr_;
+  EventsEncoder::pair enc = EventsEncoder::encode_death(thread_id_, ts_and_cpu(false));
   p = AltVarintCodec::encode_unsigned(p, enc.first);
   p = AltVarintCodec::encode_unsigned(p, enc.second);
 
   {
     SpinLockHolder h(&lock);
-    append_buf_locked(buf_storage, p - buf_storage);
+    append_buf_locked(buf_storage_, p - buf_storage_);
   }
+
   memset(this, 0xfe, sizeof(*this));
 }
 
@@ -457,9 +463,13 @@ static void finalize_buf() {
   tracer_buffer->Finalize();
 }
 
-REGISTER_MODULE_DESTRUCTOR(tracer_deinit, do {
-  finalize_buf();
-} while (0));
+class TracerDeinit {
+ public:
+  ~TracerDeinit() {
+    finalize_buf();
+  }
+};
+static TracerDeinit tracer_deinit;
 
 void MallocTracer::SPrintStats(char* start, char* end) {
   snprintf(start, end - start,
