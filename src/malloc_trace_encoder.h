@@ -57,17 +57,20 @@ struct EventsEncoder {
   static const unsigned kExtTypeShift = 8;
   static const unsigned kExtTypeMask = 0xff;
 
+  static const int kTSShift = 10;
+  static const uint64_t kTSMask = ~((1ULL << kTSShift) - 1);
+
   typedef std::pair<uint64_t, uint64_t> pair;
   typedef std::pair<uint64_t, std::pair<uint64_t, uint64_t> > triple;
 
   static uint64_t bundle_ts_and_cpu(uint64_t ts, uint64_t cpu) {
-    return (ts & ~1023) | (cpu & 1023);
+    return (ts & kTSMask) | (cpu & ~kTSMask);
   }
 
   template <typename I1, typename I2>
   static void unbundle_ts_and_cpu(uint64_t word, I1 *ts, I2 *cpu) {
-    *ts = word & ~1023;
-    *cpu = word & 1023;
+    *ts = word & kTSMask;
+    *cpu = word & ~kTSMask;
   }
 
   static uint64_t encode_malloc(size_t _size, ssize_t *prev_size) {

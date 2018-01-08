@@ -68,11 +68,12 @@ const unsigned EventsEncoder::kEventSyncBarrier;
 const unsigned EventsEncoder::kExtTypeShift;
 const unsigned EventsEncoder::kExtTypeMask;
 
+const int EventsEncoder::kTSShift;
+const uint64_t EventsEncoder::kTSMask;
+
 static const int kDumperPeriodMicros = 3000;
 
 static const int kTokenSize = 1 << 10;
-static const int kTSShift = 10;
-static const uint64_t kTSMask = ~((1ULL << kTSShift) - 1);
 
 static SpinLock lock(base::LINKER_INITIALIZED);
 
@@ -152,11 +153,11 @@ void MallocTracer::MallocTracerDestructor(void *arg) {
 static uint64_t get_nanos() {
   struct timespec tss;
   clock_gettime(CLOCK_MONOTONIC, &tss);
-  return (uint64_t)tss.tv_sec * 1000000000 + tss.tv_nsec;
+  return (uint64_t)tss.tv_sec * 1000000000 + tss.tv_nsec - base_ts;
 }
 
 void MallocTracer::SetupFirstTracer() {
-  base_ts = get_nanos() & kTSMask;
+  base_ts = get_nanos() & EventsEncoder::kTSMask;
   new (get_first_tracer()) MallocTracer(0);
 }
 
@@ -257,24 +258,22 @@ static void append_buf_locked(const char *buf, size_t size) {
   tracer_buffer->AppendData(buf, size);
 }
 
-uint64_t MallocTracer::ts_and_cpu(bool from_saver) {
+uint64_t MallocTracer::UpdateTSAndCPU() {
   uint64_t ts = get_nanos();
-  ts &= kTSMask;
-  ts -= base_ts;
   last_cpu_ = sched_getcpu();
-  // last_cpu_ = base::subtle::percpu::RseqCpuId();
-  ts |= last_cpu_ & ~kTSMask;
-  if (from_saver) {
-    ts |= (1 << (kTSShift - 1));
-  }
-  return ts;
+  return EventsEncoder::bundle_ts_and_cpu(ts, last_cpu_);
 }
 
-void MallocTracer::RefreshBufferInnerLocked(uint64_t size, bool from_saver) {
+void MallocTracer::RefreshBufferInnerLocked(uint64_t size, uint64_t ts_and_cpu) {
   char meta_buf[32];
   char *p = meta_buf;
+  // if (update_cpu) {
+  //   last_cpu_ = sched_getcpu();
+  // }
+  // uint64_t ts_and_cpu = EventsEncoder::bundle_ts_and_cpu(get_nanos(),
+  //                                                        last_cpu_);
   EventsEncoder::triple enc =
-    EventsEncoder::encode_buffer(thread_id_, ts_and_cpu(from_saver), size);
+    EventsEncoder::encode_buffer(thread_id_, ts_and_cpu, size);
   p = AltVarintCodec::encode_unsigned(p, enc.first);
   p = AltVarintCodec::encode_unsigned(p, enc.second.first);
   p = AltVarintCodec::encode_unsigned(p, enc.second.second);
@@ -287,7 +286,8 @@ void MallocTracer::RefreshBuffer() {
   SpinLockHolder h(&lock);
 
   if (buf_ptr_ != signal_saved_buf_ptr_) {
-    RefreshBufferInnerLocked(buf_ptr_ - signal_saved_buf_ptr_, false);
+    RefreshBufferInnerLocked(buf_ptr_ - signal_saved_buf_ptr_,
+                             UpdateTSAndCPU());
   }
 
   SetBufPtr(buf_storage_);
@@ -301,7 +301,8 @@ void MallocTracer::DumpFromSaverThread() {
     return;
   }
 
-  RefreshBufferInnerLocked(s, true);
+  uint64_t tscpu = EventsEncoder::bundle_ts_and_cpu(get_nanos(), last_cpu_);
+  RefreshBufferInnerLocked(s, tscpu);
 
   signal_saved_buf_ptr_ = signal_snapshot_buf_ptr_;
 
@@ -314,8 +315,9 @@ void MallocTracer::RefreshTokenAndDec() {
   token_base_ = base;
   counter_ = kTokenSize;
 
-  EventsEncoder::pair enc =
-    EventsEncoder::encode_token(base - kTokenSize, ts_and_cpu(false));
+  EventsEncoder::pair enc = EventsEncoder::encode_token(
+      base - kTokenSize,
+      UpdateTSAndCPU());
 
   AppendWords(2, enc.first, enc.second);
 }
@@ -363,8 +365,10 @@ void MallocTracer::DumpEverything() {
 
   char sync_end_buf[24];
   char *p = sync_end_buf;
-  //TODO
-  EventsEncoder::pair enc = EventsEncoder::encode_sync_barrier(0); //ts_and_cpu(false));
+
+  uint64_t ts_and_cpu = EventsEncoder::bundle_ts_and_cpu(get_nanos(),
+                                                         sched_getcpu());
+  EventsEncoder::pair enc = EventsEncoder::encode_sync_barrier(ts_and_cpu);
   p = AltVarintCodec::encode_unsigned(p, enc.first);
   p = AltVarintCodec::encode_unsigned(p, enc.second);
   append_buf_locked(sync_end_buf, p - sync_end_buf);
@@ -386,7 +390,8 @@ MallocTracer::~MallocTracer() {
   RefreshBuffer();
 
   char *p = buf_ptr_;
-  EventsEncoder::pair enc = EventsEncoder::encode_death(thread_id_, ts_and_cpu(false));
+  EventsEncoder::pair enc = EventsEncoder::encode_death(thread_id_,
+                                                        UpdateTSAndCPU());
   p = AltVarintCodec::encode_unsigned(p, enc.first);
   p = AltVarintCodec::encode_unsigned(p, enc.second);
 
