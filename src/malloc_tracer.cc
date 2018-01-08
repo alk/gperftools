@@ -398,7 +398,7 @@ MallocTracer::~MallocTracer() {
   memset(this, 0xfe, sizeof(*this));
 }
 
-static void finalize_buf() {
+static void finalize_tracing() {
   // saving rest of trace may still malloc, particularly if saver
   // thread uses snappy. So we need to drop lock soon. But we drop all
   // further buffer writes.
@@ -419,7 +419,7 @@ static void finalize_buf() {
 class TracerDeinit {
  public:
   ~TracerDeinit() {
-    finalize_buf();
+    finalize_tracing();
   }
 };
 static TracerDeinit tracer_deinit;

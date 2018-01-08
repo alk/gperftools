@@ -211,7 +211,6 @@ void LZ4Compressor::WriteLast(const char* data, size_t amount) {
 static sem_t saver_thread_sem;
 
 static void *saver_thread(void *_arg) {
-  MallocTracer::GetInstance();
   MallocTracer::ExcludeCurrentThreadFromDumping();
   sem_post(&saver_thread_sem);
 
