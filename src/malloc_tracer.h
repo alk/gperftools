@@ -82,8 +82,8 @@ private:
   static MallocTracer *GetInstanceSlow();
   static void SetupFirstTracer();
 
-  static void do_setup_tls();
-  static void malloc_tracer_destructor(void *arg);
+  static void DoSetupTLS();
+  static void MallocTracerDestructor(void *arg);
 
   inline uint64_t ts_and_cpu(bool from_saver);
 

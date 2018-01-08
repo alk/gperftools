@@ -110,7 +110,7 @@ static MallocTracer *get_first_tracer() {
   return reinterpret_cast<MallocTracer *>(&first_tracer_space.s);
 }
 
-void MallocTracer::malloc_tracer_destructor(void *arg) {
+void MallocTracer::MallocTracerDestructor(void *arg) {
   CHECK_CONDITION(!had_tracer);
 
   MallocTracer::Storage *instanceptr =
@@ -131,8 +131,10 @@ void MallocTracer::malloc_tracer_destructor(void *arg) {
     if (s) {
       s->pprev = instanceptr->pprev;
     }
-    instanceptr->pprev = reinterpret_cast<MallocTracer::Storage **>(0xababababababababULL);
-    instanceptr->next = reinterpret_cast<MallocTracer::Storage *>(0xcdcdcdcdcdcdcdcdULL);
+    instanceptr->pprev =
+        reinterpret_cast<MallocTracer::Storage **>(0xababababababababULL);
+    instanceptr->next =
+        reinterpret_cast<MallocTracer::Storage *>(0xcdcdcdcdcdcdcdcdULL);
   }
 
   had_tracer = true;
@@ -158,16 +160,17 @@ void MallocTracer::SetupFirstTracer() {
   new (get_first_tracer()) MallocTracer(0);
 }
 
-// guards cases of malloc calls during do_setup
+// in_setup guards cases of malloc calls during DoSetupTLS
 static __thread bool in_setup ATTR_INITIAL_EXEC;
 
-void MallocTracer::do_setup_tls() {
+void MallocTracer::DoSetupTLS() {
   in_setup = true;
 
   tracer_buffer = TracerBuffer::GetInstance();
 
   malloc_tracer_allocator.Init();
-  int rv = pthread_key_create(&instance_key, &MallocTracer::malloc_tracer_destructor);
+  int rv = pthread_key_create(&instance_key,
+                              &MallocTracer::MallocTracerDestructor);
   CHECK_CONDITION(!rv);
 
   in_setup = false;
@@ -201,7 +204,7 @@ MallocTracer *MallocTracer::GetInstanceSlow(void) {
     return get_first_tracer();
   }
 
-  pthread_once(&setup_once, &MallocTracer::do_setup_tls);
+  pthread_once(&setup_once, &MallocTracer::DoSetupTLS);
 
   MallocTracer *an_instance;
   {
@@ -342,8 +345,9 @@ void MallocTracer::DumpEverything() {
   SpinLockHolder h(&lock);
 
   for (MallocTracer::Storage *s = all_tracers_; s != NULL; s = s->next) {
-    // benign race here, reading buf_ptr
-    s->ptr->signal_snapshot_buf_ptr_ = *const_cast<char * volatile *>(&s->ptr->buf_ptr_);
+    // benign race reading buf_ptr here.
+    char* buf_ptr = *const_cast<char * volatile *>(&s->ptr->buf_ptr_);
+    s->ptr->signal_snapshot_buf_ptr_ = buf_ptr;
   }
 
   // ensure that we're able to see all the data written up to
