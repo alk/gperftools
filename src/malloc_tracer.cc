@@ -267,11 +267,6 @@ uint64_t MallocTracer::UpdateTSAndCPU() {
 void MallocTracer::RefreshBufferInnerLocked(uint64_t size, uint64_t ts_and_cpu) {
   char meta_buf[32];
   char *p = meta_buf;
-  // if (update_cpu) {
-  //   last_cpu_ = sched_getcpu();
-  // }
-  // uint64_t ts_and_cpu = EventsEncoder::bundle_ts_and_cpu(get_nanos(),
-  //                                                        last_cpu_);
   EventsEncoder::triple enc =
     EventsEncoder::encode_buffer(thread_id_, ts_and_cpu, size);
   p = AltVarintCodec::encode_unsigned(p, enc.first);
