@@ -75,8 +75,8 @@ private:
 
   void RefreshToken();
   void RefreshTokenAndDec();
-  void RefreshBufferInnerLocked(uint64_t, bool from_saver);
-  void RefreshBuffer(int count, uint64_t first, uint64_t second);
+  void RefreshBufferInnerLocked(uint64_t amount, bool from_saver);
+  void RefreshBuffer();
 
   static MallocTracer *GetInstanceSlow();
   static void SetupFirstTracer();
@@ -85,8 +85,6 @@ private:
   static void malloc_tracer_destructor(void *arg);
 
   inline uint64_t ts_and_cpu(bool from_saver);
-
-  void WriteWordsSlow(int count, uint64_t first, uint64_t second);
 
   void DumpFromSaverThread();
 
@@ -131,18 +129,17 @@ MallocTracer *MallocTracer::GetInstance() {
 inline ATTRIBUTE_ALWAYS_INLINE
 void MallocTracer::AppendWords(int count, uint64_t first, uint64_t second) {
   if (PREDICT_FALSE(!HasSpaceFor(count))) {
-    RefreshBuffer(count, first, second);
-    return;
+    RefreshBuffer();
   }
 
-  char *wp = buf_ptr_;
+  char *p = buf_ptr_;
 
-  wp = AltVarintCodec::encode_unsigned(wp, first);
+  p = AltVarintCodec::encode_unsigned(p, first);
   if (count > 1) {
-    wp = AltVarintCodec::encode_unsigned(wp, second);
+    p = AltVarintCodec::encode_unsigned(p, second);
   }
 
-  SetBufPtr(wp);
+  SetBufPtr(p);
 }
 
 inline ATTRIBUTE_ALWAYS_INLINE

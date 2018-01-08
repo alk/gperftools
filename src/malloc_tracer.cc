@@ -280,57 +280,15 @@ void MallocTracer::RefreshBufferInnerLocked(uint64_t size, bool from_saver) {
   append_buf_locked(signal_saved_buf_ptr_, size);
 }
 
-void MallocTracer::RefreshBuffer(int number, uint64_t one, uint64_t two) {
+void MallocTracer::RefreshBuffer() {
   SpinLockHolder h(&lock);
 
-repeat:
   if (buf_ptr_ != signal_saved_buf_ptr_) {
     RefreshBufferInnerLocked(buf_ptr_ - signal_saved_buf_ptr_, false);
   }
 
   SetBufPtr(buf_storage_);
   signal_saved_buf_ptr_ = buf_storage_;
-
-  switch (number) {
-  case 0:
-    return;
-  case 2:
-    SetBufPtr(AltVarintCodec::encode_unsigned(
-                AltVarintCodec::encode_unsigned(buf_ptr_, one), two));
-    break;
-  case 1:
-    SetBufPtr(AltVarintCodec::encode_unsigned(buf_ptr_, one));
-    break;
-  default:
-    abort();
-  }
-
-  if (destroy_count_) {
-    number = 0;
-    goto repeat;
-  }
-}
-
-void MallocTracer::WriteWordsSlow(int count, uint64_t first, uint64_t second) {
-  if (!HasSpaceFor(count + 2)) {
-    RefreshBuffer(count, first, second);
-    return;
-  }
-
-  char *p = buf_ptr_;
-
-  p = AltVarintCodec::encode_unsigned(p, first);
-  if (count > 1) {
-    p = AltVarintCodec::encode_unsigned(p, second);
-  }
-
-  EventsEncoder::pair enc =
-      EventsEncoder::encode_token(token_base_ - counter_ + 1, ts_and_cpu(false));
-
-  p = AltVarintCodec::encode_unsigned(p, enc.first);
-  p = AltVarintCodec::encode_unsigned(p, enc.second);
-
-  SetBufPtr(p);
 }
 
 void MallocTracer::DumpFromSaverThread() {
@@ -353,19 +311,10 @@ void MallocTracer::RefreshTokenAndDec() {
   token_base_ = base;
   counter_ = kTokenSize;
 
-  if (!HasSpaceFor(2)) {
-    RefreshBuffer(0, 0, 0);
-  }
-
-  char *p = buf_ptr_;
-
   EventsEncoder::pair enc =
     EventsEncoder::encode_token(base - kTokenSize, ts_and_cpu(false));
 
-  p = AltVarintCodec::encode_unsigned(p, enc.first);
-  p = AltVarintCodec::encode_unsigned(p, enc.second);
-
-  SetBufPtr(p);
+  AppendWords(2, enc.first, enc.second);
 }
 
 void MallocTracer::RefreshToken() {
@@ -430,7 +379,7 @@ void MallocTracer::ExcludeCurrentThreadFromDumping() {
 }
 
 MallocTracer::~MallocTracer() {
-  RefreshBuffer(0, 0, 0);
+  RefreshBuffer();
 
   char *p = buf_ptr_;
   EventsEncoder::pair enc = EventsEncoder::encode_death(thread_id_, ts_and_cpu(false));
