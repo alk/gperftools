@@ -36,6 +36,7 @@
 #if USE_LZ4
 #include <lz4frame.h>
 #endif
+#include <malloc.h>
 #include <netdb.h>
 #include <pthread.h>
 #include <semaphore.h>
@@ -126,6 +127,8 @@ private:
 
 #if USE_LZ4
 
+static const int kPageSize = 4 << 10;
+
 class LZ4Compressor : public Writer {
 public:
   LZ4Compressor(Writer* slave);
@@ -134,13 +137,17 @@ public:
   void Write(const char* data, size_t amount);
   void WriteLast(const char* data, size_t amount);
 
+  void* operator new(size_t sz) {
+    return memalign(kPageSize, (sz + kPageSize - 1) & ~(kPageSize - 1));
+  }
+
 private:
-  char buffer_[4<<20] __attribute__((aligned(4096)));
   static const int kMinAmountToSave = 3 << 20;
   static const int kBlockSize = 16 << 10;
   int buf_tail_;
   LZ4F_cctx* lzctx_;
   Writer* const slave_;
+  char buffer_[4<<20] __attribute__((aligned(4096)));
 };
 
 const int LZ4Compressor::kBlockSize;
