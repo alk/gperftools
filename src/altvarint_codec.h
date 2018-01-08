@@ -124,6 +124,7 @@ char *AltVarintCodec::encode_unsigned(char *place, uint64_t val) {
 
   val = (val << 1) | 1;
 
+  // note, this is +1 due to shift above
   static uint8_t encode_bits[64] CACHELINE_ALIGNED = {
     0, 0, 0, 0, 0, 0, 0, 0,
     1, 1, 1, 1, 1, 1, 1, 2,
