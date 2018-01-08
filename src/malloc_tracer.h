@@ -37,9 +37,9 @@
 #include <stdint.h>                     // for uint32_t, uint64_t
 #endif
 
+#include "altvarint_codec.h"
 #include "base/basictypes.h"
 #include "malloc_trace_encoder.h"
-#include "varint_codec.h"
 
 namespace tcmalloc {
 

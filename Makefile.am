@@ -788,8 +788,8 @@ dist_doc_DATA += docs/overview.dot \
 
 lib_LTLIBRARIES += libtcmalloc_minimal_tracing.la
 libtcmalloc_minimal_tracing_la_SOURCES =  src/tracingallocation.cc \
-                                          src/varint_codec.h \
-                                          src/varint_codec.cc \
+                                          src/altvarint_codec.h \
+                                          src/altvarint_codec.cc \
                                           src/malloc_trace_encoder.h \
                                           src/malloc_tracer.h \
                                           src/malloc_tracer.cc \
@@ -897,7 +897,7 @@ librun_benchmark_la_SOURCES = \
 	benchmark/run_benchmark.c benchmark/run_benchmark.h
 
 noinst_PROGRAMS += malloc_bench malloc_bench_shared \
-	malloc_bench_shared_full varint_bench \
+	malloc_bench_shared_full altvarint_bench \
 	binary_trees binary_trees_shared
 
 malloc_bench_SOURCES = benchmark/malloc_bench.cc
@@ -928,10 +928,11 @@ endif !OSX
 
 endif WITH_HEAP_PROFILER_OR_CHECKER
 
-varint_bench_SOURCES = benchmark/varint_codec_bench.cc src/varint_codec.cc
-varint_bench_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS)
-varint_bench_LDFLAGS = $(PTHREAD_CFLAGS) $(TCMALLOC_FLAGS) -static
-varint_bench_LDADD = librun_benchmark.la $(PTHREAD_LIBS)
+altvarint_bench_SOURCES = benchmark/altvarint_codec_bench.cc \
+	src/altvarint_codec.cc src/altvarint_codec.h
+altvarint_bench_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS)
+altvarint_bench_LDFLAGS = $(PTHREAD_CFLAGS) $(TCMALLOC_FLAGS) -static
+altvarint_bench_LDADD = librun_benchmark.la $(PTHREAD_LIBS)
 
 binary_trees_SOURCES = benchmark/binary_trees.cc
 binary_trees_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS) $(NO_BUILTIN_CXXFLAGS)

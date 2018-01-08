@@ -33,7 +33,7 @@
 
 #include <utility> // for std::pair
 
-#include "varint_codec.h"
+#include "altvarint_codec.h"
 
 namespace tcmalloc {
 

@@ -16,6 +16,7 @@
 /aclocal.m4
 /addressmap_unittest
 /addressmap_unittest.exe
+/altvarint_bench
 /atomicops_unittest
 /atomicops_unittest.exe
 /autom4te.cache/
@@ -147,4 +148,3 @@
 /thread_dealloc_unittest.exe
 /unwind_bench
 /unwind_bench.exe
-/varint_bench

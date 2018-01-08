@@ -30,7 +30,7 @@
 #include <stdint.h>
 
 #include "run_benchmark.h"
-#include "varint_codec.h"
+#include "altvarint_codec.h"
 
 using namespace tcmalloc;
 
