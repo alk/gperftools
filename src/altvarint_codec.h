@@ -39,11 +39,9 @@
 
 namespace tcmalloc {
 
-// This uses variant of ULEB128 (aka varint) that places "continuation
-// bits" into lowest bits. It is optimized for very fast branchless
-// encoding and decoding.
-//
-// This implementation only works for little endian machines.
+// This encoding is variant of ULEB128 (aka varint) that places
+// "continuation bits" into lowest bits. It is optimized for very fast
+// branchless encoding and decoding.
 //
 // This is same encoding as described here:
 // https://github.com/WebAssembly/design/issues/601#issuecomment-196022303
@@ -65,6 +63,8 @@ namespace tcmalloc {
 //
 // Signed values are zigzag-ed. See
 // https://developers.google.com/protocol-buffers/docs/encoding#signed-integers
+//
+// This implementation only works for little endian machines.
 class AltVarintCodec {
 public:
   // 9 bytes is what largest ints get encoded into.
@@ -88,6 +88,9 @@ public:
   static inline char *encode_unsigned(char *place, uint64_t val);
   static inline char *encode_signed(char *place, int64_t val);
 
+  static inline DecodeResult<uint64_t> decode_unsigned(const char *place);
+  static inline DecodeResult<int64_t> decode_signed(const char *place);
+
   // zigzag is used to transform signed value into unsigned. unzigzag
   // is reverse transform. Values closer to 0 get mapped to small
   // outputs. I.e. unlike 2's complementary encoding for negative
@@ -103,9 +106,6 @@ public:
     uint64_t sign = val & 1;
     return (val >> 1) ^ (0 - sign);
   }
-
-  static inline DecodeResult<uint64_t> decode_unsigned(const char *place);
-  static inline DecodeResult<int64_t> decode_signed(const char *place);
 };
 
 inline char *AltVarintCodec::encode_signed(char *place, int64_t val) {
@@ -193,7 +193,7 @@ inline AltVarintCodec::DecodeResult<uint64_t> AltVarintCodec::decode_unsigned(
   val >>= p;
 
   static uint64_t decode_masks[9] = {
-    0, // due to p += 1 index 0 is bogus
+    0, // due to p += 1 index 0 is unused and bogus
     0x0000007FLLU, 0x00003FFFLLU,
     0x001FFFFFLLU, 0x0FFFFFFFLLU,
     0x7FFFFFFFFLLU, 0x3FFFFFFFFFFLLU,
