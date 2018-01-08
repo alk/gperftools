@@ -29,6 +29,8 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "config.h"
 
+#include "malloc_tracer.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -46,8 +48,7 @@
 #include "base/googleinit.h"
 #include "base/spinlock.h"
 #include "internal_logging.h"
-#include "malloc_tracer.h"
-#include "malloc_tracer_buf.h"
+#include "tracer_buffer.h"
 #include "page_heap_allocator.h"
 
 namespace tcmalloc {

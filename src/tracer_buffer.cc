@@ -29,37 +29,35 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "config.h"
 
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/types.h>
+#include "tracer_buffer.h"
+
 #include <errno.h>
-#include <stdlib.h>
-#include <sys/mman.h>
-#include <time.h>
-#include <stdio.h>
-#include <pthread.h>
-#include <semaphore.h>
-#include <signal.h>
-
-#include <sys/socket.h>
-#include <netdb.h>
-#include <sys/un.h>
-
+#include <fcntl.h>
 #if USE_LZ4
 #include <lz4frame.h>
 #endif
+#include <netdb.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/un.h>
+#include <time.h>
+#include <unistd.h>
 
-#include "malloc_tracer.h"
-#include "malloc_tracer_buf.h"
-
-#include "base/googleinit.h"
 #include "base/atomicops.h"
+#include "base/googleinit.h"
 #include "internal_logging.h"
+#include "malloc_tracer.h"
 
 namespace tcmalloc {
 
-#define BUFS_COUNT 8
-#define FD_BUF_SIZE ((64 << 20)/BUFS_COUNT)
+static const int kBufsCount = 8;
+static const int kOneBufSize = (64 << 20)/kBufsCount;
 
 // Buffer lifecycle is as follows:
 //
@@ -77,11 +75,11 @@ namespace tcmalloc {
 //  space_sem, which represents that the buffer is ready to be filled
 //  again.
 //
-static char fd_buf[BUFS_COUNT][FD_BUF_SIZE] __attribute__((aligned(4096)));
+static char fd_buf[kBufsCount][kOneBufSize] __attribute__((aligned(4096)));
 static int write_buf;
-static int to_save_pos[BUFS_COUNT];
-static sem_t space_sem[BUFS_COUNT];
-static sem_t ready_sem[BUFS_COUNT];
+static int to_save_pos[kBufsCount];
+static sem_t space_sem[kBufsCount];
+static sem_t ready_sem[kBufsCount];
 
 static uint64_t total_saved;
 
@@ -234,7 +232,7 @@ static void *saver_thread(void *_arg) {
     }
     total_saved += to_save;
     sem_post(space_sem + bufno);
-    bufno = (bufno + 1) % BUFS_COUNT;
+    bufno = (bufno + 1) % kBufsCount;
   }
 
   if (writer) {
@@ -346,7 +344,7 @@ private:
 
 ActualTracerBuffer::ActualTracerBuffer() {
   sem_wait(space_sem + 0);
-  SetBuffer(fd_buf[0], 0, FD_BUF_SIZE);
+  SetBuffer(fd_buf[0], 0, kOneBufSize);
 }
 
 void ActualTracerBuffer::RefreshInternal(int to_write) {
@@ -354,7 +352,7 @@ void ActualTracerBuffer::RefreshInternal(int to_write) {
 
   int tail = current - start - to_write;
 
-  int next_buf = (write_buf + 1) % BUFS_COUNT;
+  int next_buf = (write_buf + 1) % kBufsCount;
   sem_wait(space_sem + next_buf);
 
   memcpy(fd_buf[next_buf], fd_buf[write_buf] + to_write, tail);
@@ -363,7 +361,7 @@ void ActualTracerBuffer::RefreshInternal(int to_write) {
   sem_post(ready_sem + write_buf);
 
   write_buf = next_buf;
-  SetBuffer(fd_buf[write_buf], tail, FD_BUF_SIZE);
+  SetBuffer(fd_buf[write_buf], tail, kOneBufSize);
 }
 
 void ActualTracerBuffer::Refresh() {
@@ -379,8 +377,8 @@ void ActualTracerBuffer::Finalize() {
   // buffers. Once we're done, we can be sure that saver cannot be
   // running and that our last 2 buffers we passed to saver got
   // through.
-  for (int i = 1; i < BUFS_COUNT; i++) {
-    sem_wait(space_sem + (write_buf + i) % BUFS_COUNT);
+  for (int i = 1; i < kBufsCount; i++) {
+    sem_wait(space_sem + (write_buf + i) % kBufsCount);
   }
 }
 
@@ -401,7 +399,7 @@ TracerBuffer* TracerBuffer::GetInstance() {
   static int initialized;
 
   if (!initialized) {
-    for (int i = 0; i < BUFS_COUNT; i++) {
+    for (int i = 0; i < kBufsCount; i++) {
       sem_init(space_sem + i, 0, 1);
       sem_init(ready_sem + i, 0, 0);
     }

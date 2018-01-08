@@ -28,8 +28,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef MALLOC_TRACER_BUF_H
-#define MALLOC_TRACER_BUF_H
+#ifndef TCMALLOC_TRACER_BUFFER_H_
+#define TCMALLOC_TRACER_BUFFER_H_
 #include <string.h>
 #include <stdlib.h>
 
@@ -69,4 +69,4 @@ protected:
 
 } // namespace tcmalloc
 
-#endif
+#endif  // TCMALLOC_TRACER_BUFFER_H_
