@@ -87,7 +87,7 @@ static uint64_t total_saved;
 static AtomicWord fully_setup;
 
 class Writer {
-public:
+ public:
   virtual ~Writer() {}
 
   virtual void Write(const char* data, size_t amount) = 0;
@@ -95,7 +95,7 @@ public:
 };
 
 class DirectWriter : public Writer {
-public:
+ public:
   DirectWriter(int fd) : fd_(fd) {}
   ~DirectWriter() {}
 
@@ -121,7 +121,7 @@ public:
     close(fd_);
   }
 
-private:
+ private:
   int fd_;
 };
 
@@ -130,7 +130,7 @@ private:
 static const int kPageSize = 4 << 10;
 
 class LZ4Compressor : public Writer {
-public:
+ public:
   LZ4Compressor(Writer* slave);
   ~LZ4Compressor();
 
@@ -141,7 +141,7 @@ public:
     return memalign(kPageSize, (sz + kPageSize - 1) & ~(kPageSize - 1));
   }
 
-private:
+ private:
   static const int kMinAmountToSave = 3 << 20;
   static const int kBlockSize = 16 << 10;
   int buf_tail_;
@@ -328,7 +328,7 @@ static void do_setup_tail() {
 REGISTER_MODULE_INITIALIZER(setup_buf_tail, do_setup_tail());
 
 class ActualTracerBuffer : public TracerBuffer {
-public:
+ public:
   ActualTracerBuffer();
 
   virtual void Refresh();
@@ -345,7 +345,7 @@ public:
 
   char *start;
 
-private:
+ private:
   ~ActualTracerBuffer() {}
 };
 

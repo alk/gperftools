@@ -44,7 +44,7 @@
 namespace tcmalloc {
 
 class MallocTracer {
-public:
+ public:
   static inline MallocTracer *GetInstance();
 
   inline uint64_t TraceMalloc(size_t size);
@@ -57,7 +57,7 @@ public:
   static void ExcludeCurrentThreadFromDumping();
   static void SPrintStats(char* start, char* end);
 
-private:
+ private:
   MallocTracer(uint64_t _thread_id);
   ~MallocTracer();
 

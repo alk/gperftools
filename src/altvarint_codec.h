@@ -66,7 +66,7 @@ namespace tcmalloc {
 //
 // This implementation only works for little endian machines.
 class AltVarintCodec {
-public:
+ public:
   // 9 bytes is what largest ints get encoded into.
   static const int kMaxSize = 9;
 
