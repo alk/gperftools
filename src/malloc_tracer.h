@@ -135,9 +135,9 @@ void MallocTracer::AppendWords(int count, uint64_t first, uint64_t second) {
 
   char *wp = buf_ptr;
 
-  wp = VarintCodec::encode_unsigned(wp, first);
+  wp = AltVarintCodec::encode_unsigned(wp, first);
   if (count > 1) {
-    wp = VarintCodec::encode_unsigned(wp, second);
+    wp = AltVarintCodec::encode_unsigned(wp, second);
   }
 
   SetBufPtr(wp);

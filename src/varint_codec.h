@@ -28,15 +28,50 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef VARINT_CODEC_H
-#define VARINT_CODEC_H
+#ifndef TCMALLOC_ALTVARINT_CODEC_H_
+#define TCMALLOC_ALTVARINT_CODEC_H_
+#include "config.h"
+
 #include <stdint.h>
 #include <string.h>
 
+#include "base/basictypes.h"
+
 namespace tcmalloc {
 
-class VarintCodec {
+// This uses variant of ULEB128 (aka varint) that places "continuation
+// bits" into lowest bits. It is optimized for very fast branchless
+// encoding and decoding.
+//
+// This implementation only works for little endian machines.
+//
+// This is same encoding as described here:
+// https://github.com/WebAssembly/design/issues/601#issuecomment-196022303
+//
+// Quoting from there: (this is first byte and how many total bytes
+// are used for encoding)
+//
+// xxxxxxx1  7 bits in 1 byte
+// xxxxxx10 14 bits in 2 bytes
+// xxxxx100 21 bits in 3 bytes
+// xxxx1000 28 bits in 4 bytes
+// xxx10000 35 bits in 5 bytes
+// xx100000 42 bits in 6 bytes
+// x1000000 49 bits in 7 bytes
+// 10000000 56 bits in 8 bytes
+// 00000000 64 bits in 9 bytes
+//
+// I.e. largest words are exception to "leading zeros count" rule.
+//
+// Signed values are zigzag-ed. See
+// https://developers.google.com/protocol-buffers/docs/encoding#signed-integers
+class AltVarintCodec {
 public:
+  // 9 bytes is what largest ints get encoded into.
+  static const int kMaxSize = 9;
+
+  // DecodeResult is just a pair of values returned from decode_XXX
+  // functions.
   template <typename T>
   struct DecodeResult {
     uint64_t advance;
@@ -50,9 +85,15 @@ public:
     }
   };
 
-  static char *encode_unsigned(char *place, uint64_t val);
-  static char *encode_signed(char *place, int64_t val);
+  static inline char *encode_unsigned(char *place, uint64_t val);
+  static inline char *encode_signed(char *place, int64_t val);
 
+  // zigzag is used to transform signed value into unsigned. unzigzag
+  // is reverse transform. Values closer to 0 get mapped to small
+  // outputs. I.e. unlike 2's complementary encoding for negative
+  // values which has same binary representation as huge unsigned
+  // integers. See
+  // https://developers.google.com/protocol-buffers/docs/encoding#signed-integers
   static uint64_t zigzag(int64_t val) {
     val = (val << 1) ^ (val >> 63);
     return static_cast<uint64_t>(val);
@@ -63,34 +104,36 @@ public:
     return (val >> 1) ^ (0 - sign);
   }
 
-  static DecodeResult<uint64_t> decode_unsigned(const char *place);
-  static DecodeResult<int64_t> decode_signed(const char *place);
-
-private:
-  static __attribute__ ((visibility("internal")))  unsigned char encode_bits[64];
-  static __attribute__ ((visibility("internal")))  uint64_t decode_masks[9];
+  static inline DecodeResult<uint64_t> decode_unsigned(const char *place);
+  static inline DecodeResult<int64_t> decode_signed(const char *place);
 };
 
-inline char *VarintCodec::encode_signed(char *place, int64_t val) {
+inline char *AltVarintCodec::encode_signed(char *place, int64_t val) {
   return encode_unsigned(place, zigzag(val));
 }
 
-__attribute__((always_inline))
-inline char *VarintCodec::encode_unsigned(char *place, uint64_t val) {
-  // if (__builtin_expect(val < 128ULL, 1)) {
-  //   val = (val << 1) | 1;
-  //   *place = val;
-  //   return place + 1;
-  // }
-
-  if (__builtin_expect((val >> 53) != 0, 0)) {
-    uint16_t high = val >> 54;
-    val = (val << 10) | (1 << 9);
+inline ATTRIBUTE_ALWAYS_INLINE
+char *AltVarintCodec::encode_unsigned(char *place, uint64_t val) {
+  if (PREDICT_FALSE((val >> 56) != 0)) {
+    uint8_t high = val >> 56;
+    val = (val << 8);
     memcpy(place, &val, sizeof(val));
     memcpy(place + 8, &high, sizeof(high));
-    return place + 10;
+    return place + 9;
   }
+
   val = (val << 1) | 1;
+
+  static uint8_t encode_bits[64] CACHELINE_ALIGNED = {
+    0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 2,
+    2, 2, 2, 2, 2, 2, 3, 3,
+    3, 3, 3, 3, 3, 4, 4, 4,
+    4, 4, 4, 4, 5, 5, 5, 5,
+    5, 5, 5, 6, 6, 6, 6, 6,
+    6, 6, 7, 7, 7, 7, 7, 7,
+    7, 8, 8, 8, 8, 8, 8, 8
+  };
 
 #if !defined(__x86_64__)
   unsigned bit = (63 - __builtin_clzll(val));
@@ -116,23 +159,28 @@ inline char *VarintCodec::encode_unsigned(char *place, uint64_t val) {
   return place + bits + 1;
 }
 
-inline VarintCodec::DecodeResult<int64_t> VarintCodec::decode_signed(const char *place) {
+inline AltVarintCodec::DecodeResult<int64_t> AltVarintCodec::decode_signed(
+    const char *place) {
   DecodeResult<uint64_t> t = decode_unsigned(place);
   int64_t val = static_cast<int64_t>(t.value >> 1);
   val ^= -static_cast<int64_t>(t.value & 1);
   return DecodeResult<int64_t>::make(t.advance, val);
 }
 
-inline VarintCodec::DecodeResult<uint64_t> VarintCodec::decode_unsigned(const char *place)
-{
-  uint64_t val = *reinterpret_cast<const uint64_t *>(place);
+inline AltVarintCodec::DecodeResult<uint64_t> AltVarintCodec::decode_unsigned(
+    const char *place) {
+  uint64_t val;
+  memcpy(&val, place, 8);
 
-  // if (__builtin_expect(val & 1, 1)) {
-  //   return DecodeResult<uint64_t>::make(1, (val & 0xff) >> 1);
-  // }
-  // if (val & 3) {
-  //   return DecodeResult<uint64_t>::make(place + 2, (val & 0xffff) >> 2);
-  // }
+  // 9 bytes case is when all 8 lowest bits are 0. This is special case
+  // when no leading bit is encoded.
+  if (PREDICT_FALSE(!(val & 0xff))) {
+    memcpy(&val, place + 1, 8);
+    return DecodeResult<uint64_t>::make(9, val);
+  }
+
+  // At this point we know there is at least 1 bit set among lowest 8
+  // bits of val, so bsf-ing is safe and well-defined.
 
 #if !defined(__x86_64__)
   unsigned p = __builtin_ffsll(val);
@@ -140,14 +188,16 @@ inline VarintCodec::DecodeResult<uint64_t> VarintCodec::decode_unsigned(const ch
   unsigned p;
   __asm__ ("xorl %0, %0; bsfl %1, %0" : "=&r"(p) : "r"((uint32_t)val));
 #endif
+
   p += 1;
   val >>= p;
-  if (__builtin_expect(p > 8, 0)) {
-    uint16_t high;
-    memcpy(&high, place + 8, sizeof(high));
-    val |= ((uint64_t)high << (64-p));
-    return DecodeResult<uint64_t>::make(p, val);
-  }
+
+  static uint64_t decode_masks[9] = {
+    0, // due to p += 1 index 0 is bogus
+    0x0000007FLLU, 0x00003FFFLLU,
+    0x001FFFFFLLU, 0x0FFFFFFFLLU,
+    0x7FFFFFFFFLLU, 0x3FFFFFFFFFFLLU,
+    0x1FFFFFFFFFFFFLLU, 0xFFFFFFFFFFFFFFFFLLU};
 
   uint64_t mask = decode_masks[p];
   return DecodeResult<uint64_t>::make(p, val & mask);
@@ -155,4 +205,4 @@ inline VarintCodec::DecodeResult<uint64_t> VarintCodec::decode_unsigned(const ch
 
 } // namespace tcmalloc
 
-#endif
+#endif  // TCMALLOC_ALTVARINT_CODEC_H_

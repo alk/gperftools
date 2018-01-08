@@ -1,4 +1,7 @@
 // -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
+// Copyright (c) 2016, gperftools Contributors
+// All rights reserved.
+//
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -29,24 +32,26 @@
 
 namespace tcmalloc {
 
-__attribute__((aligned(64)))
-unsigned char VarintCodec::encode_bits[64] = {
-  0, 0, 0, 0, 0, 0, 0, 0,
-  1, 1, 1, 1, 1, 1, 1, 2,
-  2, 2, 2, 2, 2, 2, 3, 3,
-  3, 3, 3, 3, 3, 4, 4, 4,
-  4, 4, 4, 4, 5, 5, 5, 5,
-  5, 5, 5, 6, 6, 6, 6, 6,
-  6, 6, 7, 7, 7, 7, 7, 7,
-  7, 8, 8, 8, 8, 8, 8, 8
-};
+const int AltVarintCodec::kMaxSize;
 
-__attribute__((aligned(64)))
-uint64_t VarintCodec::decode_masks[9] = {
-  0x00000000LLU, 0x0000007FLLU,
-  0x00003FFFLLU, 0x001FFFFFLLU,
-  0x0FFFFFFFLLU, 0x7FFFFFFFFLLU,
-  0x3FFFFFFFFFFLLU, 0x1FFFFFFFFFFFFLLU,
-  0xFFFFFFFFFFFFFFFFLLU};
+// __attribute__((aligned(64)))
+// unsigned char VarintCodec::encode_bits[64] = {
+//   0, 0, 0, 0, 0, 0, 0, 0,
+//   1, 1, 1, 1, 1, 1, 1, 2,
+//   2, 2, 2, 2, 2, 2, 3, 3,
+//   3, 3, 3, 3, 3, 4, 4, 4,
+//   4, 4, 4, 4, 5, 5, 5, 5,
+//   5, 5, 5, 6, 6, 6, 6, 6,
+//   6, 6, 7, 7, 7, 7, 7, 7,
+//   7, 8, 8, 8, 8, 8, 8, 8
+// };
 
-} // namespace tcmalloc
+// __attribute__((aligned(64)))
+// uint64_t VarintCodec::decode_masks[9] = {
+//   0x00000000LLU, 0x0000007FLLU,
+//   0x00003FFFLLU, 0x001FFFFFLLU,
+//   0x0FFFFFFFLLU, 0x7FFFFFFFFLLU,
+//   0x3FFFFFFFFFFLLU, 0x1FFFFFFFFFFFFLLU,
+//   0xFFFFFFFFFFFFFFFFLLU};
+
+}  // namespace tcmalloc

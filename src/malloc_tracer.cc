@@ -270,9 +270,9 @@ void MallocTracer::RefreshBufferInnerLocked(uint64_t size, bool from_saver) {
   char *p = meta_buf;
   EventsEncoder::triple enc =
     EventsEncoder::encode_buffer(thread_id, ts_and_cpu(from_saver), size);
-  p = VarintCodec::encode_unsigned(p, enc.first);
-  p = VarintCodec::encode_unsigned(p, enc.second.first);
-  p = VarintCodec::encode_unsigned(p, enc.second.second);
+  p = AltVarintCodec::encode_unsigned(p, enc.first);
+  p = AltVarintCodec::encode_unsigned(p, enc.second.first);
+  p = AltVarintCodec::encode_unsigned(p, enc.second.second);
 
   append_buf_locked(meta_buf, p - meta_buf);
   append_buf_locked(signal_saved_buf_ptr, size);
@@ -293,11 +293,11 @@ repeat:
   case 0:
     return;
   case 2:
-    SetBufPtr(VarintCodec::encode_unsigned(
-                VarintCodec::encode_unsigned(buf_ptr, one), two));
+    SetBufPtr(AltVarintCodec::encode_unsigned(
+                AltVarintCodec::encode_unsigned(buf_ptr, one), two));
     break;
   case 1:
-    SetBufPtr(VarintCodec::encode_unsigned(buf_ptr, one));
+    SetBufPtr(AltVarintCodec::encode_unsigned(buf_ptr, one));
     break;
   default:
     abort();
@@ -317,16 +317,16 @@ void MallocTracer::WriteWordsSlow(int count, uint64_t first, uint64_t second) {
 
   char *p = buf_ptr;
 
-  p = VarintCodec::encode_unsigned(p, first);
+  p = AltVarintCodec::encode_unsigned(p, first);
   if (count > 1) {
-    p = VarintCodec::encode_unsigned(p, second);
+    p = AltVarintCodec::encode_unsigned(p, second);
   }
 
   EventsEncoder::pair enc =
       EventsEncoder::encode_token(token_base - counter + 1, ts_and_cpu(false));
 
-  p = VarintCodec::encode_unsigned(p, enc.first);
-  p = VarintCodec::encode_unsigned(p, enc.second);
+  p = AltVarintCodec::encode_unsigned(p, enc.first);
+  p = AltVarintCodec::encode_unsigned(p, enc.second);
 
   SetBufPtr(p);
 }
@@ -360,8 +360,8 @@ void MallocTracer::RefreshTokenAndDec() {
   EventsEncoder::pair enc =
     EventsEncoder::encode_token(base - kTokenSize, ts_and_cpu(false));
 
-  p = VarintCodec::encode_unsigned(p, enc.first);
-  p = VarintCodec::encode_unsigned(p, enc.second);
+  p = AltVarintCodec::encode_unsigned(p, enc.first);
+  p = AltVarintCodec::encode_unsigned(p, enc.second);
 
   SetBufPtr(p);
 }
@@ -410,8 +410,8 @@ void MallocTracer::DumpEverything() {
   char *p = sync_end_buf;
   //TODO
   EventsEncoder::pair enc = EventsEncoder::encode_sync_barrier(0); //ts_and_cpu(false));
-  p = VarintCodec::encode_unsigned(p, enc.first);
-  p = VarintCodec::encode_unsigned(p, enc.second);
+  p = AltVarintCodec::encode_unsigned(p, enc.first);
+  p = AltVarintCodec::encode_unsigned(p, enc.second);
   append_buf_locked(sync_end_buf, p - sync_end_buf);
 }
 
@@ -429,8 +429,8 @@ MallocTracer::~MallocTracer() {
 
   char *p = buf_ptr;
   EventsEncoder::pair enc = EventsEncoder::encode_death(thread_id, ts_and_cpu(false));
-  p = VarintCodec::encode_unsigned(p, enc.first);
-  p = VarintCodec::encode_unsigned(p, enc.second);
+  p = AltVarintCodec::encode_unsigned(p, enc.first);
+  p = AltVarintCodec::encode_unsigned(p, enc.second);
 
   {
     SpinLockHolder h(&lock);
@@ -450,7 +450,7 @@ static void finalize_buf() {
 
   char encoded_end[16];
   char *p = encoded_end;
-  p = VarintCodec::encode_unsigned(p, EventsEncoder::encode_end());
+  p = AltVarintCodec::encode_unsigned(p, EventsEncoder::encode_end());
   ASSERT(p <= encoded_end + sizeof(encoded_end));
 
   tracer_buffer->AppendData(encoded_end, p - encoded_end);

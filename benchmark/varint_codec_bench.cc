@@ -36,7 +36,7 @@ using namespace tcmalloc;
 
 static char *decode_varint(char *place, uint64_t *pval)
 {
-  VarintCodec::DecodeResult<uint64_t> rv = VarintCodec::decode_unsigned(place);
+  AltVarintCodec::DecodeResult<uint64_t> rv = AltVarintCodec::decode_unsigned(place);
   *pval = rv.value;
   return place + rv.advance;
 }
@@ -46,8 +46,8 @@ void test_roundtrip(uint64_t i, char *buf)
 {
   char *p = buf;
   char *q;
-  p = VarintCodec::encode_unsigned(p, i);
-  p = VarintCodec::encode_unsigned(p, 0x64);
+  p = AltVarintCodec::encode_unsigned(p, i);
+  p = AltVarintCodec::encode_unsigned(p, 0x64);
   __builtin_memset(p, 0xff, 64);
 
   q = p;
@@ -100,15 +100,15 @@ static void bench_encode_signed(long iterations, uintptr_t _param)
       p = buf;
     }
 
-    p = VarintCodec::encode_signed(p, signed_param);
-    p = VarintCodec::encode_signed(p, signed_param);
-    p = VarintCodec::encode_signed(p, signed_param);
-    p = VarintCodec::encode_signed(p, signed_param);
+    p = AltVarintCodec::encode_signed(p, signed_param);
+    p = AltVarintCodec::encode_signed(p, signed_param);
+    p = AltVarintCodec::encode_signed(p, signed_param);
+    p = AltVarintCodec::encode_signed(p, signed_param);
 
-    p = VarintCodec::encode_signed(p, signed_param);
-    p = VarintCodec::encode_signed(p, signed_param);
-    p = VarintCodec::encode_signed(p, signed_param);
-    p = VarintCodec::encode_signed(p, signed_param);
+    p = AltVarintCodec::encode_signed(p, signed_param);
+    p = AltVarintCodec::encode_signed(p, signed_param);
+    p = AltVarintCodec::encode_signed(p, signed_param);
+    p = AltVarintCodec::encode_signed(p, signed_param);
 
     iterations -= 8;
   } while (iterations > 0);
@@ -125,15 +125,15 @@ static void bench_encode_varint(long iterations, uintptr_t _param)
       p = buf;
     }
 
-    p = VarintCodec::encode_unsigned(p, param);
-    p = VarintCodec::encode_unsigned(p, param);
-    p = VarintCodec::encode_unsigned(p, param);
-    p = VarintCodec::encode_unsigned(p, param);
+    p = AltVarintCodec::encode_unsigned(p, param);
+    p = AltVarintCodec::encode_unsigned(p, param);
+    p = AltVarintCodec::encode_unsigned(p, param);
+    p = AltVarintCodec::encode_unsigned(p, param);
 
-    p = VarintCodec::encode_unsigned(p, param);
-    p = VarintCodec::encode_unsigned(p, param);
-    p = VarintCodec::encode_unsigned(p, param);
-    p = VarintCodec::encode_unsigned(p, param);
+    p = AltVarintCodec::encode_unsigned(p, param);
+    p = AltVarintCodec::encode_unsigned(p, param);
+    p = AltVarintCodec::encode_unsigned(p, param);
+    p = AltVarintCodec::encode_unsigned(p, param);
 
     iterations -= 8;
   } while (iterations > 0);
