@@ -64,6 +64,7 @@ private:
   inline void AppendWords(int count, uint64_t first, uint64_t second);
 
   void SetBufPtr(char *new_value) {
+    // TODO: compiler barrier
     *const_cast<char * volatile *>(&buf_ptr_) = new_value;
   }
 
