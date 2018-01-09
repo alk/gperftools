@@ -40,6 +40,8 @@
 namespace tcmalloc {
 
 struct MallocTraceEncoder {
+  static const uint32_t kMagic = 0x6CBD63E4;
+
   static const unsigned kEventMalloc = 0x00;
   static const unsigned kEventFree = 0x01;
   static const unsigned kEventTok = 0x02;

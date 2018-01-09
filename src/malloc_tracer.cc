@@ -151,6 +151,9 @@ void MallocTracer::DoSetupTLS() {
 
   tracer_buffer = TracerBuffer::GetInstance();
 
+  uint32_t magic = MallocTraceEncoder::kMagic;
+  tracer_buffer->AppendData(reinterpret_cast<char*>(&magic), sizeof(magic));
+
   malloc_tracer_allocator.Init();
   int rv = pthread_key_create(&instance_key,
                               &MallocTracer::MallocTracerDestructor);
