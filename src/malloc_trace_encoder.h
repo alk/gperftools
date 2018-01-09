@@ -31,6 +31,8 @@
 #ifndef TCMALLOC_MALLOC_TRACE_ENCODER_H_
 #define TCMALLOC_MALLOC_TRACE_ENCODER_H_
 
+#include <sys/types.h> // for ssize_t
+
 #include <utility> // for std::pair
 
 #include "altvarint_codec.h"
