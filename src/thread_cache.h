@@ -133,9 +133,10 @@ class ThreadCache {
  private:
   class FreeList {
    private:
-    void*    list_;       // Linked list of nodes
+    void*    list0_;       // Linked list of nodes
+    void*    list1_;
 
-#ifdef _LP64
+#if 0
     // On 64-bit hardware, manipulating 16-bit values may be slightly slow.
     uint32_t length_;      // Current length.
     uint32_t lowater_;     // Low water mark for list length.
@@ -156,7 +157,7 @@ class ThreadCache {
 
    public:
     void Init(size_t size) {
-      list_ = NULL;
+      list0_ = list1_ = NULL;
       length_ = 0;
       lowater_ = 0;
       max_length_ = 1;
@@ -195,7 +196,7 @@ class ThreadCache {
 
     // Is list empty?
     bool empty() const {
-      return list_ == NULL;
+      return list0_ == NULL;
     }
 
     // Low-water mark management
@@ -204,20 +205,34 @@ class ThreadCache {
 
     uint32_t Push(void* ptr) {
       uint32_t length = length_ + 1;
-      SLL_Push(&list_, ptr);
+      // SLL_Push(&list_, ptr);
+      void* l0 = list0_;
+      void* l1 = list1_;
+      SLL_Push(&l1, ptr);
+      list0_ = l1;
+      list1_ = l0;
       length_ = length;
       return length;
     }
 
     void* Pop() {
-      ASSERT(list_ != NULL);
+      ASSERT(list0_ != NULL);
       length_--;
       if (length_ < lowater_) lowater_ = length_;
-      return SLL_Pop(&list_);
+      void* l0 = list0_;
+      void* l1 = list1_;
+      void* retval = SLL_Pop(&l0);
+      list0_ = l1;
+      list1_ = l0;
+      return retval;
     }
 
     bool TryPop(void **rv) {
-      if (SLL_TryPop(&list_, rv)) {
+      void* l0 = list0_;
+      void* l1 = list1_;
+      if (SLL_TryPop(&l0, rv)) {
+        list0_ = l1;
+        list1_ = l0;
         length_--;
         if (PREDICT_FALSE(length_ < lowater_)) lowater_ = length_;
         return true;
@@ -226,19 +241,31 @@ class ThreadCache {
     }
 
     void* Next() {
-      return SLL_Next(&list_);
+      return SLL_Next(&list0_);
     }
 
     void PushRange(int N, void *start, void *end) {
-      SLL_PushRange(&list_, start, end);
-      length_ += N;
+      for (int i = N; i > 0; i--) {
+        void* next = SLL_Next(start);
+        Push(start);
+        start = next;
+      }
     }
 
     void PopRange(int N, void **start, void **end) {
-      SLL_PopRange(&list_, N, start, end);
-      ASSERT(length_ >= N);
-      length_ -= N;
-      if (length_ < lowater_) lowater_ = length_;
+      if (N == 0) {
+        *start = *end = NULL;
+        return;
+      }
+      void *last = Pop();
+      *start = last;
+      for (int i = N - 1; i > 0; i--) {
+        void* next = Pop();
+        SLL_SetNext(last, next);
+        last = next;
+      }
+      SLL_SetNext(last, NULL);
+      *end = last;
     }
   };
 
