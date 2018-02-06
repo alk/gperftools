@@ -106,23 +106,20 @@ class MallocTracer {
   char *signal_saved_buf_ptr_;
   int destroy_count_;
 
-  char buf_storage_[4008];
+  char buf_storage_[3992];
   // sizeof(MallocTracer) == 4096
 
-  struct Storage {
-    MallocTracer *ptr;
-    Storage **pprev;
-    Storage *next;
-  };
+  MallocTracer* next;
+  MallocTracer** pprev;
 
-  static __thread Storage instance_ ATTR_INITIAL_EXEC;
-  static Storage *all_tracers_;
+  static __thread MallocTracer* instance_ ATTR_INITIAL_EXEC;
+  static MallocTracer *all_tracers_;
 };
 
 inline ATTRIBUTE_ALWAYS_INLINE
 MallocTracer *MallocTracer::GetInstance() {
-  if (instance_.ptr) {
-    return instance_.ptr;
+  if (instance_) {
+    return instance_;
   }
   return GetInstanceSlow();
 }

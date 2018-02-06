@@ -65,10 +65,10 @@ static uint64_t thread_dump_written;
 
 static uint64_t base_ts;
 
-__thread MallocTracer::Storage MallocTracer::instance_ ATTR_INITIAL_EXEC;
-__thread bool had_tracer;
+__thread MallocTracer* MallocTracer::instance_ ATTR_INITIAL_EXEC;
+__thread bool had_tracer ATTR_INITIAL_EXEC;
 
-MallocTracer::Storage *MallocTracer::all_tracers_;
+MallocTracer* MallocTracer::all_tracers_;
 
 static pthread_key_t instance_key;
 static pthread_once_t setup_once = PTHREAD_ONCE_INIT;
@@ -96,10 +96,10 @@ static MallocTracer *get_first_tracer() {
 void MallocTracer::MallocTracerDestructor(void *arg) {
   CHECK_CONDITION(!had_tracer);
 
-  MallocTracer::Storage *instanceptr =
-      reinterpret_cast<MallocTracer::Storage *>(arg);
+  MallocTracer** instanceptr =
+      reinterpret_cast<MallocTracer **>(arg);
 
-  MallocTracer *tracer = instanceptr->ptr;
+  MallocTracer *tracer = *instanceptr;
 
   // have pthread call us again on next destruction iteration and give
   // rest of tls destructors chance to get traced properly
@@ -108,20 +108,20 @@ void MallocTracer::MallocTracerDestructor(void *arg) {
     return;
   }
 
-  if (instanceptr->pprev) {
+  if (tracer->pprev) {
     SpinLockHolder l(&lock);
-    MallocTracer::Storage *s = *instanceptr->pprev = instanceptr->next;
-    if (s) {
-      s->pprev = instanceptr->pprev;
+    MallocTracer* next = *tracer->pprev = tracer->next;
+    if (next) {
+      next->pprev = tracer->pprev;
     }
-    instanceptr->pprev =
-        reinterpret_cast<MallocTracer::Storage **>(0xababababababababULL);
-    instanceptr->next =
-        reinterpret_cast<MallocTracer::Storage *>(0xcdcdcdcdcdcdcdcdULL);
+    tracer->pprev =
+        reinterpret_cast<MallocTracer**>(0xababababababababULL);
+    tracer->next =
+        reinterpret_cast<MallocTracer*>(0xcdcdcdcdcdcdcdcdULL);
   }
 
   had_tracer = true;
-  instanceptr->ptr = NULL;
+  *instanceptr = NULL;
   tracer->~MallocTracer();
 
   if (tracer == get_first_tracer()) {
@@ -204,14 +204,15 @@ MallocTracer *MallocTracer::GetInstanceSlow(void) {
       new (an_instance) MallocTracer(thread_id);
     }
 
-    instance_.ptr = an_instance;
-    instance_.next = all_tracers_;
-    instance_.pprev = &all_tracers_;
+    instance_ = an_instance;
 
-    if (instance_.next) {
-      instance_.next->pprev = &instance_.next;
+    an_instance->next = all_tracers_;
+    an_instance->pprev = &all_tracers_;
+
+    if (an_instance->next) {
+      an_instance->next->pprev = &an_instance->next;
     }
-    all_tracers_ = &instance_;
+    all_tracers_ = an_instance;
   }
 
   if (!had_tracer) {
@@ -326,21 +327,21 @@ void MallocTracer::DumpEverything() {
 
   SpinLockHolder h(&lock);
 
-  for (MallocTracer::Storage *s = all_tracers_; s != NULL; s = s->next) {
+  for (MallocTracer* t = all_tracers_; t != NULL; t = t->next) {
     // benign race reading buf_ptr here.
-    char* buf_ptr = *const_cast<char * volatile *>(&s->ptr->buf_ptr_);
-    s->ptr->signal_snapshot_buf_ptr_ = buf_ptr;
+    char* buf_ptr = *const_cast<char * volatile *>(&t->buf_ptr_);
+    t->signal_snapshot_buf_ptr_ = buf_ptr;
   }
 
   // ensure that we're able to see all the data written up to
   // signal_snapshot_buf_ptr of all threads
   process_wide_barrier();
 
-  for (MallocTracer::Storage *s = all_tracers_; s != NULL; s = s->next) {
-    if (s->ptr->signal_snapshot_buf_ptr_ == s->ptr->signal_saved_buf_ptr_) {
+  for (MallocTracer* t = all_tracers_; t != NULL; t = t->next) {
+    if (t->signal_snapshot_buf_ptr_ == t->signal_saved_buf_ptr_) {
       continue;
     }
-    s->ptr->DumpFromSaverThread();
+    t->DumpFromSaverThread();
   }
 
   char sync_end_buf[24];
@@ -358,13 +359,16 @@ void MallocTracer::DumpEverything() {
 void MallocTracer::ExcludeCurrentThreadFromDumping() {
   (void)GetInstance();
 
-  if (instance_.pprev == NULL) {
+  if (instance_->pprev == NULL) {
     return;
   }
 
   SpinLockHolder h(&lock);
-  *instance_.pprev = instance_.next;
-  instance_.pprev = NULL;
+  MallocTracer* next = *instance_->pprev = instance_->next;
+  if (next) {
+    next->pprev = instance_->pprev;
+  }
+  instance_->pprev = NULL;
 }
 
 MallocTracer::~MallocTracer() {
