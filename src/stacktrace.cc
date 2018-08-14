@@ -53,6 +53,11 @@
 // correctly when GetStackTrace() is called with max_depth == 0.
 // Some code may do that.
 
+// On some GNU/Linux systems, we may need _GNU_SOURCE to get access to
+// the defined constants that define the register we want to see. Note
+// this #define must come first!
+#define _GNU_SOURCE 1
+
 #include <config.h>
 #include <stdlib.h> // for getenv
 #include <string.h> // for strcmp
