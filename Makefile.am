@@ -863,7 +863,7 @@ noinst_LTLIBRARIES += librun_benchmark.la
 librun_benchmark_la_SOURCES = \
 	benchmark/run_benchmark.c benchmark/run_benchmark.h
 
-noinst_PROGRAMS += malloc_bench malloc_bench_shared \
+noinst_PROGRAMS += malloc_bench misc_bench malloc_bench_shared \
 	binary_trees binary_trees_shared
 
 malloc_bench_SOURCES = benchmark/malloc_bench.cc
@@ -873,6 +873,13 @@ if ENABLE_STATIC
 malloc_bench_LDFLAGS += -static
 endif ENABLE_STATIC
 malloc_bench_LDADD = librun_benchmark.la libtcmalloc_minimal.la $(PTHREAD_LIBS)
+
+misc_bench_SOURCES = benchmark/misc_bench.cc
+misc_bench_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS) $(NO_BUILTIN_CXXFLAGS)
+if ENABLE_STATIC
+misc_bench_LDFLAGS = -static
+endif ENABLE_STATIC
+misc_bench_LDADD = librun_benchmark.la
 
 malloc_bench_shared_SOURCES = benchmark/malloc_bench.cc
 malloc_bench_shared_CXXFLAGS = $(PTHREAD_CFLAGS) $(AM_CXXFLAGS) $(NO_BUILTIN_CXXFLAGS)

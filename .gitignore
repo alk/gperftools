@@ -82,6 +82,7 @@
 /maybe_threads_unittest.sh
 /memalign_debug_unittest
 /memalign_unittest
+/misc_bench
 /missing
 /packed_cache_test
 /packed_cache_test.exe
