@@ -32,6 +32,7 @@ POSSIBILITY OF SUCH DAMAGE.  */
 
 #include "config.h"
 
+#include <assert.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -728,6 +729,11 @@ struct dwarf_data
   struct unit_addrs *addrs;
   /* Number of address ranges in list.  */
   size_t addrs_count;
+  // TODO: top_unit_addrs contains pointers into adds. It lists
+  // entries that nest at least one child and that are not nested into
+  // something else themselves.
+  struct unit_addrs **top_unit_addrs_begin;
+  struct unit_addrs **top_unit_addrs_end;
   /* A sorted list of units.  */
   struct unit **units;
   /* Number of units in the list.  */
@@ -4022,6 +4028,25 @@ dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
   while (pc == (entry + 1)->low)
     ++entry;
   found_entry = 0;
+  struct unit_addrs *min_idx = ddata->addrs + ddata->addrs_count;
+  {
+    struct unit_addrs **l = ddata->top_unit_addrs_begin;
+    struct unit_addrs **r = ddata->top_unit_addrs_end;
+    if (l != r) {
+      while (l + 1 < r) {
+	struct unit_addrs **x = l + (r - l) / 2;
+	if ((**x).low > pc) {
+	  r = x;
+	} else {
+	  l = x;
+	}
+      }
+
+      if (pc < (**l).high) {
+	min_idx = *l;
+      }
+    }
+  }
   while (1)
     {
       if (pc < entry->high)
@@ -4029,11 +4054,9 @@ dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
 	  found_entry = 1;
 	  break;
 	}
-      if (entry == ddata->addrs)
+      if (entry <= min_idx)
 	break;
-      if ((entry - 1)->low < entry->low)
-	break;
-      --entry;
+      entry--;
     }
   if (!found_entry)
     {
@@ -4287,6 +4310,74 @@ dwarf_fileline (struct backtrace_state *state, uintptr_t pc,
   return callback (data, pc, NULL, 0, NULL);
 }
 
+static int
+post_process_unit_addrs(struct backtrace_state* state, backtrace_error_callback error_callback, void* data,
+			struct unit_addrs *begin, size_t count,
+			struct unit_addrs ***top_unit_addrs, size_t *top_unit_addrs_count)
+{
+  struct unit_addrs* p;
+  struct unit_addrs* current_parent = NULL;
+  int fresh_top = 0;
+  int top_parents = 0;
+  int total_parent_links = 0;
+  size_t i;
+  struct backtrace_vector top_addrs_vec;
+  top_addrs_vec.base = NULL;
+  top_addrs_vec.size = 0;
+  top_addrs_vec.alc = 0;
+
+  backtrace_qsort (begin, count, sizeof (struct unit_addrs),
+		   unit_addrs_compare);
+
+  for (p = begin, i = 0; i < count; i++, p++)
+    {
+      if (current_parent && !(current_parent->low <= p->low && p->high <= current_parent->high)) {
+	current_parent = NULL;
+      }
+      if (current_parent == NULL) {
+	fresh_top = 1;
+      } else {
+	total_parent_links++;
+	if (fresh_top) {
+	  fresh_top = 0;
+	  top_parents++;
+
+	  struct unit_addrs **rec = backtrace_vector_grow(state, sizeof(void*),
+							  error_callback, data,
+							  &top_addrs_vec);
+	  if (rec == NULL) {
+	    (void)backtrace_vector_release(state, &top_addrs_vec, error_callback, data);
+	    return 1;
+	  }
+
+	  assert(current_parent == p - 1);
+
+	  *rec = current_parent;
+	}
+      }
+
+      current_parent = p;
+    }
+
+  /*
+   * printf("top_parents: %d\n", top_parents);
+   * printf("total_parent_links: %d\n", total_parent_links);
+   */
+
+  *top_unit_addrs_count = top_addrs_vec.size / sizeof(size_t);
+  /*
+   * printf("top_addrs_vec.size = %zu\n", *top_unit_addrs_count);
+   */
+  if (top_addrs_vec.size) {
+    *top_unit_addrs = backtrace_vector_finish(state, &top_addrs_vec, error_callback, data);
+    if (*top_unit_addrs == NULL) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
 /* Initialize our data structures from the DWARF debug info for a
    file.  Return NULL on failure.  */
 
@@ -4305,6 +4396,8 @@ build_dwarf_data (struct backtrace_state *state,
   struct unit_vector units_vec;
   struct unit **units;
   size_t units_count;
+  struct unit_addrs **top_unit_addrs = NULL;
+  size_t top_unit_addrs_count = 0;
   struct dwarf_data *fdata;
 
   if (!build_address_map (state, base_address, dwarf_sections, is_bigendian,
@@ -4320,8 +4413,11 @@ build_dwarf_data (struct backtrace_state *state,
   units = (struct unit **) units_vec.vec.base;
   addrs_count = addrs_vec.count;
   units_count = units_vec.count;
-  backtrace_qsort (addrs, addrs_count, sizeof (struct unit_addrs),
-		   unit_addrs_compare);
+  if (post_process_unit_addrs(state, error_callback, data,
+			      addrs, addrs_count,
+			      &top_unit_addrs, &top_unit_addrs_count)) {
+    return NULL;
+  }
   /* No qsort for units required, already sorted.  */
 
   fdata = ((struct dwarf_data *)
@@ -4337,6 +4433,8 @@ build_dwarf_data (struct backtrace_state *state,
   fdata->addrs_count = addrs_count;
   fdata->units = units;
   fdata->units_count = units_count;
+  fdata->top_unit_addrs_begin = top_unit_addrs;
+  fdata->top_unit_addrs_end = top_unit_addrs + top_unit_addrs_count;
   fdata->dwarf_sections = *dwarf_sections;
   fdata->is_bigendian = is_bigendian;
   memset (&fdata->fvec, 0, sizeof fdata->fvec);
