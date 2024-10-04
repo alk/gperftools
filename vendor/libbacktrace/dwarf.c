@@ -4031,13 +4031,9 @@ dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
 	}
       if (entry == ddata->addrs)
 	break;
-      /* Previous entry might be more "general" than current and so be
-         a better chance of meeting found_entry condition above */
-      if (entry[-1].high >= entry[0].high) {
-	--entry;
-	continue;
-      }
-      break;
+      if ((entry - 1)->low < entry->low)
+	break;
+      --entry;
     }
   if (!found_entry)
     {
