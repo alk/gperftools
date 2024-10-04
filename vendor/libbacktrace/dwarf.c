@@ -692,6 +692,7 @@ struct unit_addrs
   /* Range is LOW <= PC < HIGH.  */
   uintptr_t low;
   uintptr_t high;
+  struct unit_addrs* parent; /* NULL or another entry that is most specific of those entries that contains ours */
   /* Compilation unit for this address range.  */
   struct unit *u;
 };
@@ -4029,11 +4030,9 @@ dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
 	  found_entry = 1;
 	  break;
 	}
-      if (entry == ddata->addrs)
+      if (!entry->parent)
 	break;
-      if ((entry - 1)->low < entry->low)
-	break;
-      --entry;
+      entry = entry->parent;
     }
   if (!found_entry)
     {
@@ -4287,6 +4286,25 @@ dwarf_fileline (struct backtrace_state *state, uintptr_t pc,
   return callback (data, pc, NULL, 0, NULL);
 }
 
+static void
+post_process_unit_addrs(struct unit_addrs *begin, size_t count)
+{
+  struct unit_addrs* p;
+  struct unit_addrs* current_parent = NULL;
+  size_t i;
+
+  backtrace_qsort (begin, count, sizeof (struct unit_addrs),
+		   unit_addrs_compare);
+
+  for (p = begin, i = 0; i < count; i++, p++)
+    {
+      while (current_parent && !(current_parent->low <= p->low && p->high <= current_parent->high))
+        current_parent = current_parent->parent;
+      p->parent = current_parent;
+      current_parent = p;
+    }
+}
+
 /* Initialize our data structures from the DWARF debug info for a
    file.  Return NULL on failure.  */
 
@@ -4320,8 +4338,7 @@ build_dwarf_data (struct backtrace_state *state,
   units = (struct unit **) units_vec.vec.base;
   addrs_count = addrs_vec.count;
   units_count = units_vec.count;
-  backtrace_qsort (addrs, addrs_count, sizeof (struct unit_addrs),
-		   unit_addrs_compare);
+  post_process_unit_addrs(addrs, addrs_count);
   /* No qsort for units required, already sorted.  */
 
   fdata = ((struct dwarf_data *)
