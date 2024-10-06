@@ -523,6 +523,11 @@ noinst_LTLIBRARIES += libsymbolize.la
 libsymbolize_la_SOURCES = src/symbolize.cc vendor/libbacktrace-integration/backtrace-alloc.cc
 libsymbolize_la_LIBADD = libbacktrace.la
 
+# TODO: build always, not just when debug
+noinst_PROGRAMS += minipprof
+minipprof_SOURCES = tools/minipprof.cc
+minipprof_LDADD = libsymbolize.la liblow_level_alloc.la libcommon.la
+
 lib_LTLIBRARIES += libtcmalloc_minimal_debug.la
 libtcmalloc_minimal_debug_la_SOURCES = src/debugallocation.cc \
                                        $(MINIMAL_MALLOC_SRC)

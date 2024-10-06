@@ -91,6 +91,7 @@
 /memalign_unittest
 /min_per_thread_cache_size_test
 /min_per_thread_cache_size_test.exe
+/minipprof
 /missing
 /packed_cache_test
 /packed_cache_test.exe
@@ -157,6 +158,8 @@
 /test-driver
 /thread_dealloc_unittest
 /thread_dealloc_unittest.exe
+/tools/.deps
+/tools/.dirstamp
 /trivialre_test
 /trivialre_test.exe
 /unique_path_unittest
