@@ -47,6 +47,10 @@ typedef int (*backtrace_full_callback) (void *data, uintptr_t pc,
 typedef void (*backtrace_error_callback) (void *data, const char *msg,
 					  int errnum);
 
+#define tcmalloc_backtrace_create_state backtrace_create_state
+#define tcmalloc_backtrace_pcinfo backtrace_pcinfo
+#define tcmalloc_backtrace_syminfo backtrace_syminfo
+
 struct backtrace_state *tcmalloc_backtrace_create_state(
   const char *filename, int threaded,
   backtrace_error_callback error_callback, void *data);
@@ -72,7 +76,7 @@ int tcmalloc_backtrace_syminfo(struct backtrace_state *state, uintptr_t addr,
 // This is part of our "special sauce" that lets is release all memory
 // allocated by libbacktrace state instance. We rely on some
 // implementation details.
-void tcmalloc_backtrace_dispose_state(struct backtrace_state* state);
+static inline void tcmalloc_backtrace_dispose_state(struct backtrace_state* state) {}
 
 // This is originally defined in internal.h which we cannot include here.
 //

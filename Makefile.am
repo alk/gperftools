@@ -506,22 +506,10 @@ dist_doc_DATA += docs/overview.dot \
 
 if WITH_DEBUGALLOC
 
-noinst_LTLIBRARIES += libbacktrace.la
-libbacktrace_la_SOURCES = vendor/libbacktrace-integration/file-format.c \
-                          vendor/libbacktrace/dwarf.c \
-                          vendor/libbacktrace/fileline.c \
-                          vendor/libbacktrace/posix.c \
-                          vendor/libbacktrace/sort.c \
-                          vendor/libbacktrace/state.c \
-                          vendor/libbacktrace/read.c
-# note, we're not including our "usual" project-wide AM_CPPFLAGS here
-libbacktrace_la_CPPFLAGS = -I$(top_srcdir)/vendor/libbacktrace-integration \
-                           -I$(top_srcdir)/vendor/libbacktrace
-
 
 noinst_LTLIBRARIES += libsymbolize.la
-libsymbolize_la_SOURCES = src/symbolize.cc vendor/libbacktrace-integration/backtrace-alloc.cc
-libsymbolize_la_LIBADD = libbacktrace.la
+libsymbolize_la_SOURCES = src/symbolize.cc
+libsymbolize_la_LIBADD = -lbacktrace
 
 lib_LTLIBRARIES += libtcmalloc_minimal_debug.la
 libtcmalloc_minimal_debug_la_SOURCES = src/debugallocation.cc \
