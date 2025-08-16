@@ -61,16 +61,6 @@ PPROF=${2:-$PPROF_PATH}
 
 PROFILER="$UNITTEST_DIR/profiler_unittest"
 
-# Unfortunately, for us, libtool can replace executables with a shell
-# script that does some work before calling the 'real' executable
-# under a different name.  We need the 'real' executable name to run
-# pprof on it.  We've constructed all the binaries used in this
-# unittest so when they are called with no arguments, they report
-# their argv[0], which is the real binary name.
-Realname() {
-  "$1" 2>&1 | awk '{print $2; exit;}'
-}
-
 # It's meaningful to the profiler, so make sure we know its state
 unset CPUPROFILE
 
