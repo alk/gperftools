@@ -440,7 +440,7 @@ AS_IF([test "x$enable_lz4" = xyes],
 LIBS=$save_LIBS
 AC_SUBST(LZ4_LIBS)
 
-AS_IF([test "x$missing_lz4" = xyes],
+AS_IF([test "x$missing_lz4" = x1],
       [AC_MSG_ERROR([-llz4 not found])])
 
 AC_CACHE_CHECK([if target has _Unwind_Backtrace],
