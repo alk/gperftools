@@ -55,15 +55,15 @@ void test_roundtrip(uint64_t i, char *buf)
   uint64_t v;
   p = decode_varint(p, &v);
   if (v != i) {
-    __asm__ __volatile__ ("int $3; nop");
+    __builtin_trap();
   }
   p = decode_varint(p, &v);
   if (v != 0x64) {
-    __asm__ __volatile__ ("int $3; nop");
+    __builtin_trap();
   }
 
   if (p != q) {
-    __asm__ __volatile__ ("int $3; nop");
+    __builtin_trap();
   }
 }
 
