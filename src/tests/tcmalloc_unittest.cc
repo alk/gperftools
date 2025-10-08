@@ -1181,7 +1181,7 @@ static ATTRIBUTE_NOINLINE void TestNewOOMHandling() {
   ASSERT_EQ(saw_new_handler_runs, 0);
 
   for (int i = 0; i < 10240; i++) {
-    oom_test_last_ptr = new char [512];
+    oom_test_last_ptr = (::operator new[])(512);
     ASSERT_NE(oom_test_last_ptr, NULL);
     if (saw_new_handler_runs) {
       break;
