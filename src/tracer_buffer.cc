@@ -117,7 +117,21 @@ class DirectWriter : public Writer {
     } while (bytes > 0);
   }
   void WriteLast(const char* data, size_t amount) {
-    Write(data, (amount+4095) & ~size_t(4095));
+    {
+      // We might be doing direct io. And this last write is likely to
+      // be less than page worth of data. So lets turn of direct io
+      // just for that last block.
+      int flags = fcntl(fd_, F_GETFL);
+      if (flags < 0) {
+        perror("fcntl(F_GETFL)");
+        abort();
+      }
+      if ((flags & O_DIRECT) != 0) {
+        flags &= ~O_DIRECT;
+        fcntl(fd_, F_SETFL, flags);
+      }
+    }
+    Write(data, amount);
     close(fd_);
   }
 
