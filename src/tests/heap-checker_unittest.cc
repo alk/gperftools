@@ -873,7 +873,7 @@ static void* HeapBusyThreadBody(void* a) {
 #elif defined(__x86_64__) && defined(__GNUC__)
   register int** ptr asm("r15");
 #else
-  register int** ptr;
+  int** ptr;
 #endif
   ptr = NULL;
   typedef set<int> Set;
