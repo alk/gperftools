@@ -39,6 +39,9 @@ jobs:
           # This serves as a proxy to verify that libprofiler is configured and built,
           # which can be skipped if dependencies (like getpc.h check) fail.
           ./getpc_test
+          ./tcmalloc_minimal_debug_unittest
+          ./tcmalloc_debug_unittest
+          ./heap-profiler_unittest
       - name: Upload Test Logs
         uses: actions/upload-artifact@v4
         if: ${{ always() }}
@@ -86,6 +89,9 @@ jobs:
           # This serves as a proxy to verify that libprofiler is configured and built,
           # which can be skipped if dependencies (like getpc.h check) fail.
           ./getpc_test
+          ./tcmalloc_minimal_debug_unittest
+          ./tcmalloc_debug_unittest
+          ./heap-profiler_unittest
       - name: Upload Test Logs
         uses: actions/upload-artifact@v4
         if: ${{ always() }}
