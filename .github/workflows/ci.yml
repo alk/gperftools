@@ -35,6 +35,8 @@ jobs:
           printf "NUMCPUS=%d MORECPUS=%d\n" "$NUMCPUS" "$MORECPUS"
           make "-j${NUMCPUS}"
           make "-j${MORECPUS}" check || make "-j${MORECPUS}" recheck
+          # Verify that libprofiler is built
+          ./getpc_test
       - name: Upload Test Logs
         uses: actions/upload-artifact@v4
         if: ${{ always() }}
@@ -78,6 +80,8 @@ jobs:
           printf "NUMCPUS=%d MORECPUS=%d\n" "$NUMCPUS" "$MORECPUS"
           make "-j${NUMCPUS}"
           make "-j${MORECPUS}" check || make "-j${MORECPUS}" recheck
+          # Verify that libprofiler is built
+          ./getpc_test
       - name: Upload Test Logs
         uses: actions/upload-artifact@v4
         if: ${{ always() }}
