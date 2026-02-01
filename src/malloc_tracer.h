@@ -57,6 +57,9 @@ class MallocTracer {
   static void ExcludeCurrentThreadFromDumping();
   static void SPrintStats(char* start, char* end);
 
+  // appends misc event with the given ~arbitrary text message
+  void TraceMisc(const char* start, const char* end);
+
  private:
   MallocTracer(uint64_t _thread_id);
   ~MallocTracer();

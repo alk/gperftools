@@ -57,6 +57,7 @@ struct MallocTraceEncoder {
   static const unsigned kEventRealloc = kEventExtBase + 020;
   static const unsigned kEventMemalign = kEventExtBase + 030;
   static const unsigned kEventSyncBarrier = kEventExtBase + 040;
+  static const unsigned kEventMisc = kEventExtBase + 050;
 
   static const unsigned kExtTypeShift = 8;
   static const unsigned kExtTypeMask = 0xff;
@@ -149,6 +150,13 @@ struct MallocTraceEncoder {
 
   static pair encode_sync_barrier(uint64_t ts_and_cpu) {
     return std::make_pair(kEventSyncBarrier, ts_and_cpu);
+  }
+
+  // Misc messages are encoded like kEventBuf events but with arbitrary
+  // "misc" message data instead of trace data.
+  static triple encode_misc(uint64_t thread_id, uint64_t ts_and_cpu, uint64_t size) {
+    return std::make_pair((thread_id << kTypeShift) | kEventMisc,
+                          std::make_pair(ts_and_cpu, size));
   }
 
   static unsigned decode_type(uint64_t first_word) {

@@ -424,4 +424,21 @@ void MallocTracer::SPrintStats(char* start, char* end) {
            (unsigned long long)thread_dump_written);
 }
 
+void MallocTracer::TraceMisc(const char* start, const char* end) {
+  SpinLockHolder h(&lock);
+
+  auto ts_and_cpu = MallocTraceEncoder::bundle_ts_and_cpu(get_nanos(), sched_getcpu());
+
+  char meta_buf[32];
+  char *p = meta_buf;
+  MallocTraceEncoder::triple enc =
+      MallocTraceEncoder::encode_misc(thread_id_, ts_and_cpu, end - start);
+  p = AltVarintCodec::encode_unsigned(p, enc.first);
+  p = AltVarintCodec::encode_unsigned(p, enc.second.first);
+  p = AltVarintCodec::encode_unsigned(p, enc.second.second);
+
+  append_buf_locked(meta_buf, p - meta_buf);
+  append_buf_locked(start, end - start);
+}
+
 } // namespace tcmalloc
