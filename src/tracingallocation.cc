@@ -92,6 +92,31 @@ class TracingMallocImplementation : public TCMallocImplementation {
     return TCMallocImplementation::GetAllocatedSize(meta);
   }
 
+  void DoTraceMisc(const char* msg) {
+    MallocTracer::GetInstance()->TraceMisc(msg, msg + strlen(msg));
+  }
+
+  void MarkThreadTemporarilyIdle() override {
+    DoTraceMisc("(mark-thread-temporarily-idle)");
+    TCMallocImplementation::MarkThreadTemporarilyIdle();
+  }
+  void MarkThreadIdle() override {
+    DoTraceMisc("(mark-thread-idle)");
+    TCMallocImplementation::MarkThreadIdle();
+  }
+  void MarkThreadBusy() override {
+    DoTraceMisc("(mark-thread-busy)");
+    TCMallocImplementation::MarkThreadBusy();
+  }
+
+  void ReleaseToSystem(size_t num_bytes) override {
+    char buf[64];
+    int written = snprintf(buf, sizeof(buf),
+                           "(release-to-system %zu)", num_bytes);
+    MallocTracer::GetInstance()->TraceMisc(buf, buf + written);
+    TCMallocImplementation::ReleaseToSystem(num_bytes);
+  }
+
  };
 
 static union {
