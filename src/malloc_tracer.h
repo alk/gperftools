@@ -32,6 +32,8 @@
 #define TCMALLOC_MALLOC_TRACER_H_
 #include "config.h"
 
+#include <atomic>
+
 #include <stddef.h>                     // for size_t, NULL
 #ifdef HAVE_STDINT_H
 #include <stdint.h>                     // for uint32_t, uint64_t
@@ -66,9 +68,11 @@ class MallocTracer {
 
   inline void AppendWords(int count, uint64_t first, uint64_t second);
 
+  std::atomic<char*>* BufPtrAsAtomic() {
+    return reinterpret_cast<std::atomic<char*>*>(&buf_ptr_);
+  }
   void SetBufPtr(char *new_value) {
-    // TODO: compiler barrier
-    *const_cast<char * volatile *>(&buf_ptr_) = new_value;
+    BufPtrAsAtomic()->store(new_value, std::memory_order_release);
   }
 
   bool HasSpaceFor(int varints) {

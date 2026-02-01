@@ -308,18 +308,6 @@ void MallocTracer::RefreshToken() {
   counter_++;
 }
 
-static void process_wide_barrier() {
-  // TODO: use membarrier or google-only rseq barrier
-  // syscall
-  static volatile char a_page[4096] __attribute__((aligned(4096)));
-  // first touch page
-  a_page[0] &= 0xff;
-  // and then tell it to go away. This will trigger IPI to all cores
-  // running this process' mm for tlb flush and wait for
-  // completion. Causing memory barriers everywhere.
-  madvise(const_cast<char*>(a_page), 4096, MADV_DONTNEED);
-}
-
 void MallocTracer::DumpEverything() {
   if (!tracer_buffer->IsFullySetup()) {
     return;
@@ -328,14 +316,13 @@ void MallocTracer::DumpEverything() {
   SpinLockHolder h(&lock);
 
   for (MallocTracer* t = all_tracers_; t != NULL; t = t->next) {
-    // benign race reading buf_ptr here.
-    char* buf_ptr = *const_cast<char * volatile *>(&t->buf_ptr_);
+    // Ensure that we're able to see all the data written up to
+    // signal_snapshot_buf_ptr of all threads.
+    //
+    // TODO: simplify away signal_snapshot_buf_ptr_ thingy
+    char* buf_ptr = t->BufPtrAsAtomic()->load(std::memory_order_acquire);
     t->signal_snapshot_buf_ptr_ = buf_ptr;
   }
-
-  // ensure that we're able to see all the data written up to
-  // signal_snapshot_buf_ptr of all threads
-  process_wide_barrier();
 
   for (MallocTracer* t = all_tracers_; t != NULL; t = t->next) {
     if (t->signal_snapshot_buf_ptr_ == t->signal_saved_buf_ptr_) {
