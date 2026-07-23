@@ -1,8 +1,16 @@
 #!/usr/bin/ruby
 
-# github docs point here. Maybe eventually we'll be able to discover
-# it, so that when this path updates we don't have to edit our stuff.
-BASE = 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise'
+VSWHERE = "#{ENV['ProgramFiles(x86)']}\\Microsoft Visual Studio\\Installer\\vswhere.exe"
+
+VSPATH = `"#{VSWHERE}" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`.strip
+
+if VSPATH.empty?
+  raise "Unable to fetch visual studio installation path. VSWHERE=#{VSWHERE.inspect} VSPATH=#{VSPATH.inspect}"
+end
+
+unless File.directory? VSPATH
+  raise "bogus VSPATH? VSPATH=#{VSPATH.inspect}"
+end
 
 require 'json'
 
@@ -25,12 +33,20 @@ Dir.chdir(File.dirname(__FILE__)) do
   unless h
     File.open("msvc-env.bat", "w") do |f|
       f.write(<<HERE)
-@call "#{File.join(BASE, 'VC/Auxiliary/Build/vcvars64.bat')}"
+@call "#{File.join(VSPATH, 'VC/Auxiliary/Build/vcvars64.bat')}"
 @ruby -rjson -e "puts('!'*32); puts ENV.to_hash.to_json"
 HERE
     end
     output = `msvc-env.bat`
     h = JSON.parse(output.split('!'*32, 2).last)
+
+    required_vars = %w[INCLUDE LIB VCINSTALLDIR]
+    missing_vars = required_vars.reject { |var| h.key?(var) }
+
+    unless missing_vars.empty?
+      raise "ERROR: Environment capture succeeded but missing key MSVC variables: #{missing_vars.join(', ')}"
+    end
+
     File.open("env-cache", "w") {|f| f << h.to_json }
   end
   ENV.update(h)
