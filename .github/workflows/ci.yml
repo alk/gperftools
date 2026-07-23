@@ -12,13 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install automake autoconf libtool build-essential patch perl libc-bin libunwind-dev
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: 'stable'
       - name: Install pprof
@@ -49,7 +49,7 @@ jobs:
           # Verify that heap profiler is built and works.
           ./heap-profiler_unittest
       - name: Upload Test Logs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
           name: test-logs-${{ github.job }}
@@ -60,13 +60,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install automake autoconf libtool build-essential patch perl libc-bin g++-multilib
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: 'stable'
       - name: Install pprof
@@ -97,7 +97,7 @@ jobs:
           ./tcmalloc_debug_unittest
           ./heap-profiler_unittest
       - name: Upload Test Logs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
           name: test-logs-${{ github.job }}
@@ -112,8 +112,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Clone
-        uses: actions/checkout@v4
-      - uses: seanmiddleditch/gha-setup-ninja@v5
+        uses: actions/checkout@v7
       - name: Configure ccache action
         uses: hendrikmuhs/ccache-action@v1.2
         with:
@@ -121,7 +120,7 @@ jobs:
       - name: Add ccache to PATH
         run: echo "PATH=/usr/lib/ccache:$PATH" >> $GITHUB_ENV
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: 'stable'
       - name: Install pprof
@@ -141,7 +140,7 @@ jobs:
         working-directory: ${{runner.workspace}}/build
         run: ctest -j12 --test-dir . || ctest -j12 --test-dir . --rerun-failed
       - name: Upload Test Logs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
           name: test-logs-${{ github.job }}-${{ matrix.os }}-${{ matrix.build_type }}
@@ -156,8 +155,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Clone
-        uses: actions/checkout@v4
-      - uses: seanmiddleditch/gha-setup-ninja@v5
+        uses: actions/checkout@v7
       - name: mkdir build/
         run: cmake -E make_directory ${{runner.workspace}}/build
       - name: cmake setup
@@ -175,7 +173,7 @@ jobs:
           CTEST_PARALLEL_LEVEL: 12
         run: ninja -v test
       - name: Upload Test Logs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
           name: test-logs-${{ github.job }}-${{ matrix.os }}-${{ matrix.build_type }}
