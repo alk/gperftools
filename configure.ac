@@ -84,6 +84,11 @@ if test "$enable_minimal" = yes; then
   enable_cpu_profiler=no
   enable_heap_profiler=no
 fi
+AC_ARG_ENABLE([tests],
+              [AS_HELP_STRING([--disable-tests],
+                              [do not build or run tests])],
+              [enable_tests="$enableval"],
+              [enable_tests=yes])
 AC_ARG_ENABLE([stacktrace-via-backtrace],
               [AS_HELP_STRING([--enable-stacktrace-via-backtrace],
                               [enable use of backtrace() for stacktrace capturing (may deadlock)])],
@@ -464,6 +469,8 @@ AM_CONDITIONAL(WITH_HEAP_PROFILER_OR_CHECKER,
 # If we don't use any profilers, we don't need stack traces (or pprof)
 AM_CONDITIONAL(WITH_STACK_TRACE, test "$enable_cpu_profiler" = yes -o \
                                       "$enable_heap_profiler" = yes)
+
+AM_CONDITIONAL(BUILD_TESTS, test "x$enable_tests" = xyes)
 
 have_linux_sigev_thread_id=no
 AC_MSG_CHECKING([for Linux SIGEV_THREAD_ID])
